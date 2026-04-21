@@ -1,80 +1,134 @@
 # netrecon
 
-**Correlated network diagnostics for engineers. See through the network.**
+**Correlated network diagnostics for engineers.**
+DNS, HTTP, TLS, email posture, and CDN inference — joined into findings, not
+just dumps of raw records.
 
-netrecon takes a domain, IP, or URL and returns a *correlated* report: DNS, HTTP, TLS (via CT logs), email posture, and CDN/ASN inference - combined into findings with severity, evidence, next steps, and reproducible commands. Everything the UI shows is also available as JSON at `/api/analyze`.
+🌐 **Live:** <https://netrecon.pages.dev>
+📚 **Blog:** <https://netrecon.pages.dev/blog>
+🔌 **MCP server:** <https://netrecon.pages.dev/mcp>
 
-Built by [Yossi Ben Hagai](https://www.linkedin.com/in/yossibenhagai/).
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![Lighthouse 100](https://img.shields.io/badge/Lighthouse-100%2F100-brightgreen)](https://netrecon.pages.dev/)
 
-## What it is not
-
-- Not a commodity "dig in a browser" tool.
-- Not a paid-API aggregator.
-- Not a marketing funnel.
+---
 
 ## What it is
 
-- A static-first Astro site deployable to Cloudflare Pages in under a minute.
-- Pages Functions at the edge for the analyze / compare / tools endpoints.
-- A tool registry (`src/lib/tools.ts`) that is the single source of truth for capabilities and the foundation for a future MCP server.
+A static-first site + edge functions that take a **domain, IP, or URL** and
+return a correlated report:
 
-## Product features
+- **Raw data:** DNS records, HTTP redirect chain, TLS cert chain, email posture.
+- **Interpreted findings:** rules that combine signals across modules (e.g.
+  *CDN response headers are present but A-record ASN doesn't match the CDN —
+  origin may be directly exposed*).
+- **Likely root causes** with severity.
+- **Reproducible commands:** every finding ships with the exact `dig` / `curl` /
+  `openssl` that verifies it.
+- **Machine-readable JSON** at `/api/analyze`.
+- **MCP server** at `/api/mcp` — same tools, agent-ready.
 
-- **Unified input.** Auto-detects domain, IP, or URL.
-- **Findings engine.** Rules correlate signals across modules (e.g. *CDN headers present but A record ASN mismatches the CDN* → origin may be exposed).
-- **Reproducible commands.** Every finding ships with the exact `dig` / `curl` / `openssl` line that verifies it.
-- **Compare mode.** Diff two environments across DNS, HTTP, CDN, and email posture.
-- **Machine-readable.** `GET /api/analyze?input=…` returns the full structured report.
-- **MCP-ready.** Tool registry designed to be mirrored 1:1 as MCP tools. See `docs/mcp-plan.md`.
+## What it is not
 
-## Local setup
+- Not a commodity "dig in a browser" site.
+- Not a paid-API aggregator.
+- Not a monitoring tool (no dashboards, no alerts, no leaderboards).
+- **No ads. No email capture. No tracking beyond cookieless page analytics.**
 
-```bash
-npm install
-npm run dev          # Astro dev server for the UI (no Pages Functions)
-npm run build        # static build -> ./dist
-npm run preview      # wrangler pages dev ./dist  (UI + functions locally)
-npm test             # vitest
+## Example
+
 ```
-
-Requirements: Node 18.17+ and npm. Wrangler is installed as a dev dependency.
-
-## Deployment (Cloudflare Pages)
-
-```bash
-npm run build
-npm run deploy       # wrangler pages deploy ./dist
+$ curl -s 'https://netrecon.pages.dev/api/analyze?input=example.com' | jq '.findings[:3]'
+[
+  {
+    "id": "dmarc.policy.weak",
+    "severity": "warning",
+    "title": "DMARC policy is 'none' — no enforcement",
+    "evidence": { "record": "v=DMARC1; p=none; rua=mailto:..." },
+    "reproduce": "dig +short TXT _dmarc.example.com"
+  },
+  ...
+]
 ```
-
-Or connect the repo in the Cloudflare dashboard with:
-- Build command: `npm run build`
-- Build output directory: `dist`
-- `functions/` is auto-detected as Pages Functions.
-
-No environment variables are required for the MVP.
-
-## API
-
-| Endpoint                     | Method       | Description                                   |
-| ---                          | ---          | ---                                           |
-| `/api/analyze?input=…`       | GET          | Full report                                   |
-| `/api/analyze`               | POST `{input}` | Full report                                 |
-| `/api/compare`               | POST `{a,b}` | Side-by-side diff                             |
-| `/api/tools`                 | GET          | Tool manifest (what the backend can do)       |
-| `/api/health`                | GET          | Liveness                                      |
 
 ## Architecture
 
-See `docs/architecture.md`.
+```
+ ┌──────────────────┐    ┌────────────────────────┐    ┌────────────────────┐
+ │  Astro (static)  │ -> │  Cloudflare Pages CDN  │    │  Pages Functions   │
+ │  src/pages       │    │  (UI + blog + assets)  │    │  functions/api/*   │
+ └──────────────────┘    └────────────────────────┘    │  analyze / compare │
+                                                      │  mcp / whoami      │
+                                                      └──────────┬─────────┘
+                                                                 │
+                      ┌──────────────────────────────────────────┴─────┐
+                      │ Providers (server-side, best-effort)           │
+                      │ DoH · Certspotter / crt.sh · Team Cymru        │
+                      │ ipwho.is · Shodan facets · Browser Rendering   │
+                      └────────────────────────────────────────────────┘
+```
 
-## Limitations
+Everything interactive runs at the Cloudflare edge. No origin server, no
+container. See [`docs/roadmap.md`](./docs/roadmap.md) for phase plan.
 
-See `docs/limitations.md`. In short: no ping/traceroute/port scan (not possible from a Workers runtime), and TLS inspection uses Certificate Transparency logs rather than a live peer handshake. Both are disclosed honestly in-product.
+## Tool registry + MCP
 
-## Roadmap
+The same `TOOLS` registry in [`src/lib/tools.ts`](./src/lib/tools.ts) drives:
 
-See `docs/roadmap.md`.
+1. The web UI
+2. The HTTP API (`/api/analyze`, `/api/compare`, `/api/tools`, `/api/whoami`)
+3. The **Model Context Protocol** server at `/api/mcp`
+
+Claude Desktop / Cursor / VS Code config snippets live on
+[`/mcp`](https://netrecon.pages.dev/mcp). See [`docs/mcp-plan.md`](./docs/mcp-plan.md).
+
+## Local development
+
+Requires Node 18.17+ and npm.
+
+```bash
+git clone https://github.com/Yossibh/netrecon.git
+cd netrecon
+npm install
+npm run dev          # Astro dev server — UI only (no Pages Functions)
+npm run preview      # wrangler pages dev ./dist — full stack locally
+npm test             # vitest, 116+ tests
+npm run typecheck
+```
+
+## Deploy your own
+
+Fork, then in Cloudflare Pages:
+
+- **Build command:** `npm run build`
+- **Build output directory:** `dist`
+- `functions/` is auto-detected as Pages Functions.
+
+Optional environment variables:
+
+| Variable | What it unlocks | Where to get it |
+|---|---|---|
+| `SHODAN_API_KEY` | Exposure intel panel (ports, products, CVEs, TLS versions) | <https://account.shodan.io> |
+
+None are required — netrecon degrades gracefully when a provider key is missing.
+
+## Trust posture
+
+This is a **security tool that sends outbound probes on behalf of callers**,
+so the threat model and mitigations are public:
+
+- **Threat model:** [`docs/security.md`](./docs/security.md)
+- **Non-goals:** ads, email-gated reports, leaderboards, uptime monitoring
+- **Analytics:** Cloudflare Web Analytics (cookieless, no PII)
+
+If you find a vulnerability, please use [private disclosure](./SECURITY.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). TL;DR: tests must pass, no secrets in
+code, keep the /about promises truthful.
 
 ## License
 
-MIT © Yossi Ben Hagai.
+[MIT](./LICENSE) — built by [Yossi Ben Hagai](https://yossibh.github.io/)
+([LinkedIn](https://www.linkedin.com/in/yossibenhagai/)).

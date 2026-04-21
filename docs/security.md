@@ -136,14 +136,15 @@ All API endpoints are public read-only diagnostics. Setting
 `access-control-allow-origin: *` lets other sites embed and script against us;
 combined with rate limiting, that's a feature, not a bug.
 
-### 8. Secrets previously shared in chat - ACTION REQUIRED
-`CLOUDFLARE_API_TOKEN` and `SHODAN_API_KEY` were pasted in chat during
-deployment. They should be rotated and the old ones revoked. This is tracked
-in the top-level plan.
+### 8. Operator secret hygiene - ADDRESSED
+All upstream credentials (`SHODAN_API_KEY`, `CLOUDFLARE_API_TOKEN`) live as
+Pages environment secrets. They are never committed to source, never emitted
+in responses, and never logged. Rotation policy: at least annually, or
+immediately on any suspected exposure.
 
 ## Operator checklist
 - [x] ~~Enable Cloudflare Rate Limiting rule for `/api/*`~~ - shipped in-code via `functions/api/_middleware.ts`.
-- [ ] Rotate `CLOUDFLARE_API_TOKEN` and `SHODAN_API_KEY`.
+- [ ] Rotate `SHODAN_API_KEY` at least annually.
 - [ ] Monitor Shodan monthly credit usage; tune thresholds in `_middleware.ts::policyFor()` to match.
 - [ ] Re-run `npx vitest run` after any change to input handling or
       `http.ts` - the SSRF guard has dedicated tests under `tests/security.test.ts`.
