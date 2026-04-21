@@ -1,0 +1,13 @@
+# Long-cache hashed static assets (Astro emits content-hashed filenames under /assets/).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Static public images can be cached mid-term.
+/og.svg
+  Cache-Control: public, max-age=86400
+/favicon.svg
+  Cache-Control: public, max-age=86400
+
+# HTML should always be revalidated; short edge cache is fine.
+/*
+  Cache-Control: public, max-age=0, must-revalidate
