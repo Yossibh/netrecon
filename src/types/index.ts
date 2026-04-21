@@ -168,6 +168,55 @@ export interface IpModuleResult {
   asn: { asn: number; owner?: string; cc?: string; registry?: string } | null;
 }
 
+export interface ShodanService {
+  port?: number;
+  transport?: string;
+  product?: string;
+  version?: string;
+  cpe: string[];
+  hostnames: string[];
+  timestamp?: string;
+  ssl?: { subjectCn?: string; issuerCn?: string; notBefore?: string; notAfter?: string; versions: string[] };
+}
+
+export interface ShodanDomainRecord {
+  subdomain?: string;
+  type?: string;
+  value?: string;
+  ports: number[];
+  lastSeen?: string;
+}
+
+export type ShodanModuleResult =
+  | {
+      ok: true;
+      kind: 'host';
+      ip: string;
+      skipped?: boolean;
+      skipReason?: string;
+      hostnames?: string[];
+      domains?: string[];
+      org?: string;
+      isp?: string;
+      asn?: string;
+      os?: string;
+      tags?: string[];
+      ports?: number[];
+      vulns?: string[];
+      lastUpdate?: string;
+      services?: ShodanService[];
+    }
+  | {
+      ok: true;
+      kind: 'domain';
+      domain: string;
+      skipped?: boolean;
+      skipReason?: string;
+      subdomains?: string[];
+      tags?: string[];
+      records?: ShodanDomainRecord[];
+    };
+
 export interface AnalyzeModules {
   dns?: DnsModuleResult;
   http?: HttpModuleResult;
@@ -175,6 +224,7 @@ export interface AnalyzeModules {
   tls?: TlsModuleResult;
   inference?: InferenceModuleResult;
   ip?: IpModuleResult;
+  shodan?: ShodanModuleResult;
 }
 
 export interface AnalyzeReport {

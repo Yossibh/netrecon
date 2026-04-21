@@ -6,12 +6,17 @@ import { analyzeEmail } from './providers/email';
 import { inspectTls } from './providers/tls';
 import { inferInfrastructure } from './providers/inference';
 import { analyzeIp } from './providers/ip';
+import { shodanHost, shodanDomain } from './providers/shodan';
 import { runFindings, riskLevel } from './findings-engine';
 import { generateCommands } from './commands';
 
 const VERSION = '0.1.0';
 
-export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
+export interface BuildReportOptions {
+  shodanApiKey?: string;
+}
+
+export async function buildReport(rawInput: string, opts: BuildReportOptions = {}): Promise<AnalyzeReport> {
   const startedAt = Date.now();
   const input = detectInput(rawInput);
 
@@ -93,6 +98,23 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
       : undefined;
   modules.inference = await inferInfrastructure(modules.dns, modules.http, directIp);
 
+  // Shodan (paid). Fire only if a key is bound. Per-IP uses the actual IP input
+  // or the resolved first A record; per-domain uses the domain.
+  if (opts.shodanApiKey) {
+    const shodanTargetIp = input.ip ?? modules.dns?.records.A[0]?.data;
+    const shodanPromises: Array<Promise<void>> = [];
+    if (input.type === 'ip' && shodanTargetIp) {
+      shodanPromises.push(
+        shodanHost(shodanTargetIp, opts.shodanApiKey).then((r) => { modules.shodan = r; })
+      );
+    } else if (domain) {
+      shodanPromises.push(
+        shodanDomain(domain, opts.shodanApiKey).then((r) => { modules.shodan = r; })
+      );
+    }
+    await Promise.all(shodanPromises);
+  }
+
   const findings = runFindings({ input, modules });
   const risk = riskLevel(findings);
 
@@ -115,6 +137,7 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
       tls: modules.tls,
       inference: modules.inference,
       ip: modules.ip,
+      shodan: modules.shodan,
     },
     meta: {
       generatedAt: new Date().toISOString(),
@@ -166,13 +189,23 @@ function buildHighlights(input: NormalizedInput, modules: AnalyzeModules, findin
   } else if (modules.tls?.liveTls?.version) {
     out.push(`TLS: ${modules.tls.liveTls.version}${modules.tls.liveTls.cipher ? ' ' + modules.tls.liveTls.cipher : ''}`);
   }
+  if (modules.shodan && modules.shodan.ok && !modules.shodan.skipped) {
+    const s = modules.shodan;
+    if (s.kind === 'host') {
+      const ports = s.ports?.length ? `${s.ports.length} ports` : 'no open ports seen';
+      const vulns = s.vulns?.length ? `${s.vulns.length} CVEs` : '';
+      out.push(`Shodan: ${ports}${vulns ? ' · ' + vulns : ''}${s.org ? ' · ' + s.org : ''}`);
+    } else {
+      out.push(`Shodan: ${s.subdomains?.length ?? 0} subdomains seen`);
+    }
+  }
   out.push(`${findingsCount} finding${findingsCount === 1 ? '' : 's'}`);
   return out;
 }
 
 // Compare two inputs and diff the interesting sections.
-export async function buildComparison(rawA: string, rawB: string): Promise<CompareReport> {
-  const [a, b] = await Promise.all([buildReport(rawA), buildReport(rawB)]);
+export async function buildComparison(rawA: string, rawB: string, opts: BuildReportOptions = {}): Promise<CompareReport> {
+  const [a, b] = await Promise.all([buildReport(rawA, opts), buildReport(rawB, opts)]);
   const diffs: CompareReport['differences'] = [];
 
   const sections: Array<{ section: string; a: Record<string, unknown>; b: Record<string, unknown> }> = [

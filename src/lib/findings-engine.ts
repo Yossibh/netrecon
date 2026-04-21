@@ -257,6 +257,28 @@ const httpRules: Rule[] = [
 // TLS rules --------------------------------------------------------------------
 const tlsRules: Rule[] = [
   ({ modules, input }) => {
+    // Info-level disclosure for IP input: explain why we don't show a live
+    // peer cert. Prevents users from thinking we're hiding data.
+    if (input.type !== 'ip') return [];
+    const t = modules.tls;
+    if (!t) return [];
+    const evidence: string[] = [];
+    if (t.liveTls?.version) evidence.push(`Negotiated: ${t.liveTls.version}${t.liveTls.cipher ? ' ' + t.liveTls.cipher : ''}`);
+    if (t.hostSearched) evidence.push(`CT searched by PTR hostname: ${t.hostSearched}`);
+    return [
+      f(
+        'tls.ip-input-no-live-cert',
+        'info',
+        'TLS peer certificate not directly fetched',
+        'Cloudflare Workers does not expose peer certificate details from fetch(). For IP input we surface the live session version/cipher the runtime negotiated, and - when reverse DNS resolves - search CT logs by the PTR hostname. This is not a live handshake.',
+        evidence,
+        ['Run the live openssl command below from a machine with raw socket access to confirm the actual served certificate.'],
+        [`openssl s_client -connect ${input.ip}:443 </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates -ext subjectAltName`],
+        'tls'
+      ),
+    ];
+  },
+  ({ modules, input }) => {
     const t = modules.tls;
     if (!t?.ok || !t.latestCertificate || !input.domain) return [];
     const d = t.latestCertificate.daysUntilExpiry;
@@ -380,7 +402,47 @@ const ipRules: Rule[] = [
   },
 ];
 
-const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...inferenceRules, ...ipRules];
+const shodanRules: Rule[] = [
+  ({ modules }) => {
+    const s = modules.shodan;
+    if (!s || !s.ok || s.skipped || s.kind !== 'host') return [];
+    const out: Finding[] = [];
+    if (s.vulns && s.vulns.length) {
+      out.push(
+        f(
+          'shodan.vulns',
+          'high',
+          `Shodan reports ${s.vulns.length} known CVE${s.vulns.length === 1 ? '' : 's'} on this host`,
+          'Shodan correlates banner/version fingerprints against CVE databases. These are heuristics and may include false positives, but each warrants investigation.',
+          s.vulns.slice(0, 15),
+          ['Validate the reported CVEs against the actual installed versions.', 'Patch or mitigate confirmed vulnerabilities.'],
+          [`shodan host ${s.ip}`, `curl -s 'https://api.shodan.io/shodan/host/${s.ip}?key=$SHODAN_API_KEY' | jq '.vulns'`],
+          'shodan'
+        )
+      );
+    }
+    if (s.ports && s.ports.length) {
+      const risky = s.ports.filter((p) => [21, 23, 25, 135, 139, 445, 1433, 3306, 3389, 5432, 5900, 6379, 9200, 27017].includes(p));
+      if (risky.length) {
+        out.push(
+          f(
+            'shodan.risky-open-ports',
+            'medium',
+            `Potentially sensitive services exposed: ${risky.join(', ')}`,
+            'Shodan observed these administrative/database/remote-access ports open to the public internet. Confirm intent and apply access controls.',
+            [`Ports seen: ${s.ports.join(', ')}`],
+            ['Restrict access via firewall / security group.', 'Put sensitive services behind a VPN or bastion.'],
+            [`nmap -p ${risky.join(',')} ${s.ip}`],
+            'shodan'
+          )
+        );
+      }
+    }
+    return out;
+  },
+];
+
+const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...inferenceRules, ...ipRules, ...shodanRules];
 
 export function runFindings(ctx: { input: NormalizedInput; modules: AnalyzeModules }): Finding[] {
   const findings: Finding[] = [];

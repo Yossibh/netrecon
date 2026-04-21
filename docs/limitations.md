@@ -14,12 +14,17 @@ Same reason as `ping` - raw socket access is not available.
 Workers `fetch()` is limited to HTTPS (and a small allowlist of schemes). There is no generic `net.Socket` API. The Cloudflare `connect()` Sockets API is available but restricted to outbound TCP on a limited set of ports; we have chosen not to wire it up in the MVP to keep the tool aligned with its explicit "HTTP-layer diagnostics" scope.
 
 ### Live TLS peer handshake
-The Workers `fetch()` implementation does the TLS handshake for us and does **not** expose peer certificate details to the calling code. This means we cannot reliably return:
+The Workers `fetch()` implementation does the TLS handshake internally and does **not** expose peer certificate details to the calling code. This means we cannot reliably return:
 - the actual certificate chain as presented by the origin,
-- the negotiated TLS version and cipher,
-- the OCSP staple.
+- the OCSP staple,
+- certificate data keyed by raw IP (CT logs are indexed by hostname, not IP).
 
-**What we do instead:** `src/lib/providers/tls.ts` queries [crt.sh](https://crt.sh) Certificate Transparency logs for the most recent leaf certificate issued for the domain, and reports issuer / validity / SANs from that record. This is *different* from a live peer handshake - it captures what CAs have logged, not what the origin is currently serving - and the UI labels it accordingly. A `// TODO` in that file marks the place to swap in a live probe when Phase 4 adds one.
+**What we *can* expose on the Workers runtime:**
+- **Live session metadata** - `response.cf.tlsVersion` and `response.cf.tlsCipher` from the probe subrequest. Surfaced as `modules.tls.liveTls` whenever the runtime populates it.
+- **CT-by-hostname** - `src/lib/providers/tls.ts` queries Certspotter (primary) and crt.sh (fallback) for the most recent leaf cert issued for the hostname. Filtered to skip shared multi-tenant certs that happen to include one SAN for the target.
+- **CT-by-PTR for IP input** - when the user submits a bare IP, we use its reverse DNS (e.g. `1.1.1.1 -> one.one.one.one`) as the CT search key. It's not a live handshake, but in practice it surfaces the cert the origin actually serves.
+
+**What would be needed for a true live cert probe:** either (a) a separate off-Workers service with raw TCP socket access that performs a real handshake and parses the X.509, or (b) a JS TLS 1.2/1.3 client + ASN.1 parser bundled into the Worker using `cloudflare:sockets`. Both are on the roadmap (Phase 4) but are not in the MVP.
 
 ### `whois` (registrar-level)
 Classic `whois` uses TCP/43. Workers cannot reach it. RDAP (`https://rdap.org/domain/<d>`) is usable over HTTPS and may be added in a future phase, but it is not included in the MVP to avoid rate-limit surprises.

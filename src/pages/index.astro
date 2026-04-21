@@ -139,7 +139,8 @@ import Layout from '../components/Layout.astro';
         { id: 'email',     label: 'email posture',       at: 900 },
         { id: 'tls',       label: 'TLS / CT logs',       at: 1200 },
         { id: 'inference', label: 'CDN / ASN inference', at: 1600 },
-        { id: 'findings',  label: 'correlate findings',  at: 1900 },
+        { id: 'shodan',    label: 'Shodan intel (optional)', at: 1800 },
+        { id: 'findings',  label: 'correlate findings',  at: 2100 },
       ];
       const panel = document.createElement('div');
       panel.className = 'progress-panel';
@@ -267,9 +268,10 @@ import Layout from '../components/Layout.astro';
       );
       reportEl.appendChild(summary);
 
-      // Tabs (IP tab only when there's ip data)
+      // Tabs (IP/Shodan tabs only when data present)
       const hasIp = !!report.modules.ip;
-      const tabs = ['Findings', ...(hasIp ? ['IP'] : []), 'DNS', 'HTTP', 'Email', 'TLS', 'Inference', 'Commands', 'Raw JSON'];
+      const hasShodan = !!report.modules.shodan;
+      const tabs = ['Findings', ...(hasIp ? ['IP'] : []), ...(hasShodan ? ['Shodan'] : []), 'DNS', 'HTTP', 'Email', 'TLS', 'Inference', 'Commands', 'Raw JSON'];
       const tabBar = h('div', { class: 'tabs' });
       const panels = {};
       tabs.forEach((t, i) => {
@@ -323,6 +325,50 @@ import Layout from '../components/Layout.astro';
         ]));
         panels['IP'] = ipPanel;
         reportEl.appendChild(ipPanel);
+      }
+
+      // Shodan
+      if (hasShodan) {
+        const s = report.modules.shodan;
+        const shPanel = h('div', { class: 'panel hidden' });
+        if (s.skipped) {
+          shPanel.appendChild(h('div', { class: 'loading' }, s.skipReason || 'Shodan data unavailable.'));
+        } else if (s.kind === 'host') {
+          shPanel.appendChild(h('div', { class: 'loading' }, `Shodan intel for ${s.ip} · last seen ${s.lastUpdate || '-'}`));
+          shPanel.appendChild(kv([
+            ['Open ports', (s.ports || []).join(', ') || '-'],
+            ['Organization', s.org || '-'],
+            ['ISP', s.isp || '-'],
+            ['ASN', s.asn || '-'],
+            ['OS', s.os || '-'],
+            ['Tags', (s.tags || []).join(', ') || '-'],
+            ['Hostnames', (s.hostnames || []).join(', ') || '-'],
+            ['Vulns (CVEs)', (s.vulns || []).join(', ') || '-'],
+          ]));
+          if (s.services && s.services.length) {
+            shPanel.appendChild(h('h3', {}, 'Services'));
+            for (const svc of s.services) {
+              const header = `${svc.port}/${svc.transport || 'tcp'} · ${svc.product || 'unknown'}${svc.version ? ' ' + svc.version : ''}`;
+              shPanel.appendChild(h('div', { class: 'finding' },
+                h('div', { class: 'title' }, header),
+                svc.cpe.length ? h('div', {}, h('strong', {}, 'CPE'), h('pre', { class: 'cmd' }, svc.cpe.join('\n'))) : null,
+                svc.ssl ? h('div', {}, h('strong', {}, 'SSL (Shodan-observed)'), h('pre', { class: 'cmd' }, `subject: ${svc.ssl.subjectCn || '-'}\nissuer: ${svc.ssl.issuerCn || '-'}\nnotBefore: ${svc.ssl.notBefore || '-'}\nnotAfter: ${svc.ssl.notAfter || '-'}\nversions: ${(svc.ssl.versions || []).join(', ') || '-'}`)) : null,
+              ));
+            }
+          }
+        } else {
+          shPanel.appendChild(h('div', { class: 'loading' }, `Shodan DNS intel for ${s.domain}`));
+          shPanel.appendChild(kv([
+            ['Subdomains seen', String((s.subdomains || []).length)],
+            ['Tags', (s.tags || []).join(', ') || '-'],
+          ]));
+          if (s.subdomains && s.subdomains.length) {
+            shPanel.appendChild(h('h3', {}, 'Subdomains'));
+            shPanel.appendChild(h('pre', { class: 'cmd' }, s.subdomains.slice(0, 100).join('\n') + (s.subdomains.length > 100 ? `\n... +${s.subdomains.length - 100} more` : '')));
+          }
+        }
+        panels['Shodan'] = shPanel;
+        reportEl.appendChild(shPanel);
       }
 
       // DNS
