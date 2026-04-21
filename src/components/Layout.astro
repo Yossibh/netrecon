@@ -5,6 +5,11 @@ interface Props {
   description?: string;
 }
 const { title = 'netrecon - see through the network', description = 'Correlated network diagnostics for engineers. DNS, HTTP, TLS, email posture, and CDN inference - with findings, not just data.' } = Astro.props;
+const path = Astro.url.pathname;
+const isActive = (href: string) => {
+  if (href === '/') return path === '/' || path === '';
+  return path === href || path.startsWith(href + '/');
+};
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -22,14 +27,36 @@ const { title = 'netrecon - see through the network', description = 'Correlated 
   </head>
   <body>
     <header class="site">
-      <a class="brand" href="/">netrecon<span class="dot">.</span></a>
+      <a class="brand" href="/" aria-label="netrecon home">
+        <svg class="brand-mark" width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+          <defs>
+            <radialGradient id="nr-g" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#5cd2a3" stop-opacity="0.35" />
+              <stop offset="100%" stop-color="#5cd2a3" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="16" cy="16" r="14" fill="url(#nr-g)" />
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#2f8b6d" stroke-width="1" />
+          <circle cx="16" cy="16" r="8.5" fill="none" stroke="#2f8b6d" stroke-width="1" />
+          <circle cx="16" cy="16" r="4" fill="none" stroke="#5cd2a3" stroke-width="1" />
+          <line x1="16" y1="1" x2="16" y2="31" stroke="#2f8b6d" stroke-width="0.6" />
+          <line x1="1" y1="16" x2="31" y2="16" stroke="#2f8b6d" stroke-width="0.6" />
+          <line x1="16" y1="16" x2="27" y2="7" stroke="#5cd2a3" stroke-width="1.5" stroke-linecap="round" />
+          <circle cx="27" cy="7" r="1.8" fill="#5cd2a3" />
+        </svg>
+        <span class="brand-word"><span class="b-net">net</span><span class="b-recon">recon</span><span class="dot">.</span></span>
+      </a>
       <nav>
-        <a href="/">Analyze</a>
-        <a href="/compare">Compare</a>
-        <a href="/blog">Blog</a>
-        <a href="/about">About</a>
-        <a href="/api/tools">API</a>
+        <a href="/" class={isActive('/') ? 'active' : ''}>Analyze</a>
+        <a href="/compare" class={isActive('/compare') ? 'active' : ''}>Compare</a>
+        <a href="/blog" class={isActive('/blog') ? 'active' : ''}>Blog</a>
+        <a href="/about" class={isActive('/about') ? 'active' : ''}>About</a>
+        <a href="/api/tools" class={isActive('/api/tools') ? 'active' : ''}>API</a>
       </nav>
+      <div class="status-chip" id="status-chip" title="Checking backend status">
+        <span class="dot-led" aria-hidden="true"></span>
+        <span class="status-label">booting</span>
+      </div>
     </header>
     <main class="container">
       <slot />
@@ -37,5 +64,27 @@ const { title = 'netrecon - see through the network', description = 'Correlated 
     <footer class="site">
       netrecon · built by <a href="https://www.linkedin.com/in/yossibenhagai/" target="_blank" rel="noopener">Yossi Ben Hagai</a> · <a href="/about">about</a> · <a href="/api/health">health</a>
     </footer>
+    <script is:inline>
+      (function () {
+        var chip = document.getElementById('status-chip');
+        if (!chip) return;
+        var label = chip.querySelector('.status-label');
+        fetch('/api/health', { headers: { accept: 'application/json' } })
+          .then(function (r) { return r.ok ? r.json().then(function (j) { return { ok: true, j: j }; }) : { ok: false }; })
+          .then(function (res) {
+            if (res.ok) {
+              chip.classList.add('ok');
+              if (label) label.textContent = 'online';
+            } else {
+              chip.classList.add('err');
+              if (label) label.textContent = 'degraded';
+            }
+          })
+          .catch(function () {
+            chip.classList.add('err');
+            if (label) label.textContent = 'offline';
+          });
+      })();
+    </script>
   </body>
 </html>
