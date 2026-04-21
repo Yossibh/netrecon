@@ -28,7 +28,76 @@ import Layout from '../components/Layout.astro';
       <button type="button" data-ex="https://www.google.com/search">https://www.google.com/search</button>
       <button type="button" data-ex="1.1.1.1">1.1.1.1</button>
     </div>
+
+    <aside class="fingerprint" id="fingerprint" aria-label="Your network fingerprint">
+      <div class="fp-head">
+        <span class="fp-title mono">$ whoami</span>
+        <span class="fp-sub">What the internet sees about your session</span>
+      </div>
+      <div class="fp-grid" id="fp-grid">
+        <div class="fp-cell"><span class="fp-k">IP</span><span class="fp-v mono" id="fp-ip">-</span></div>
+        <div class="fp-cell"><span class="fp-k">ASN</span><span class="fp-v mono" id="fp-asn">-</span></div>
+        <div class="fp-cell"><span class="fp-k">Network</span><span class="fp-v" id="fp-org">-</span></div>
+        <div class="fp-cell"><span class="fp-k">Location</span><span class="fp-v" id="fp-loc">-</span></div>
+        <div class="fp-cell"><span class="fp-k">Timezone</span><span class="fp-v mono" id="fp-tz">-</span></div>
+        <div class="fp-cell"><span class="fp-k">CF edge</span><span class="fp-v mono" id="fp-colo">-</span></div>
+        <div class="fp-cell"><span class="fp-k">Protocol</span><span class="fp-v mono" id="fp-proto">-</span></div>
+        <div class="fp-cell"><span class="fp-k">TLS</span><span class="fp-v mono" id="fp-tls">-</span></div>
+        <div class="fp-cell"><span class="fp-k">Client</span><span class="fp-v" id="fp-client">-</span></div>
+      </div>
+      <div class="fp-actions">
+        <button type="button" class="fp-btn" id="fp-analyze" disabled>Analyze my IP</button>
+        <button type="button" class="fp-btn ghost" id="fp-copy">Copy as JSON</button>
+      </div>
+    </aside>
   </section>
+
+  <script is:inline>
+    (function () {
+      var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v || '-'; };
+      var data = null;
+      fetch('/api/whoami', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          data = j;
+          set('fp-ip', j.ip || 'unknown');
+          set('fp-asn', j.network && j.network.asn ? j.network.asn : '-');
+          set('fp-org', j.network && j.network.asOrganization ? j.network.asOrganization : '-');
+          var loc = [j.geo && j.geo.city, j.geo && j.geo.regionCode, j.geo && j.geo.country].filter(Boolean).join(', ');
+          set('fp-loc', loc || '-');
+          set('fp-tz', j.geo && j.geo.timezone ? j.geo.timezone : '-');
+          set('fp-colo', j.network && j.network.colo ? j.network.colo : '-');
+          set('fp-proto', j.connection && j.connection.httpProtocol ? j.connection.httpProtocol : '-');
+          var tls = (j.connection && j.connection.tlsVersion) ? j.connection.tlsVersion + (j.connection.tlsCipher ? ' / ' + j.connection.tlsCipher : '') : '-';
+          set('fp-tls', tls);
+          set('fp-client', j.client ? ((j.client.browser || 'unknown') + ' on ' + (j.client.os || 'unknown')) : '-');
+          var btn = document.getElementById('fp-analyze');
+          if (btn && j.ip) {
+            btn.disabled = false;
+            btn.textContent = 'Analyze ' + j.ip;
+          }
+        })
+        .catch(function () {
+          set('fp-ip', 'lookup failed');
+        });
+      var ana = document.getElementById('fp-analyze');
+      if (ana) ana.addEventListener('click', function () {
+        if (!data || !data.ip) return;
+        var inp = document.getElementById('input');
+        if (inp) inp.value = data.ip;
+        var form = document.getElementById('analyze-form');
+        if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      });
+      var cp = document.getElementById('fp-copy');
+      if (cp) cp.addEventListener('click', function () {
+        if (!data) return;
+        navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(function () {
+          cp.textContent = 'Copied';
+          setTimeout(function () { cp.textContent = 'Copy as JSON'; }, 1400);
+        });
+      });
+    })();
+  </script>
 
   <section id="status" class="hidden"></section>
   <section id="report" class="hidden"></section>
