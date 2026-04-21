@@ -584,7 +584,7 @@ import Layout from '../components/Layout.astro';
       } else if (tls.latestCertificate) {
         const note = tls.hostSearched && report.input.type === 'ip'
           ? `Source: Certificate Transparency logs. Searched by PTR hostname "${tls.hostSearched}" since CT indexes by name, not IP.`
-          : 'Source: Certificate Transparency logs (Certspotter / crt.sh). Not a live peer handshake.';
+          : 'Most recent certificate issuance found in Certificate Transparency logs across this domain and its subdomains. This is not necessarily the certificate being served — see "Live peer certificate" below for the cert actually returned by the origin.';
         tlsPanel.appendChild(h('div', { class: 'loading' }, note));
         tlsPanel.appendChild(kv([
           ['Issuer', tls.latestCertificate.issuer],
@@ -633,7 +633,7 @@ import Layout from '../components/Layout.astro';
             ['Negotiated version', lt.negotiatedVersion || '-'],
             ['Cipher', lt.cipherSuite || '-'],
             ['Subject', c.subject || '-'],
-            ['Issuer', c.issuer || '(not exposed by Chrome)'],
+            ['Issuer', c.issuer || '(empty in CDP response — Browser Rendering does not always expose issuer for CF-fronted targets)'],
             ['Hostname match', lt.hostnameMatch === true ? '✓' : lt.hostnameMatch === false ? '✗' : '-'],
             ['Not Before', c.notBefore || '-'],
             ['Not After', c.notAfter || '-'],
