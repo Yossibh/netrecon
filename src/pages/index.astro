@@ -416,7 +416,9 @@ const homeSchema = [
       // Tabs (IP/Exposure tabs only when data present)
       const hasIp = !!report.modules.ip;
       const hasExposure = !!report.modules.exposure;
-      const tabs = ['Findings', ...(hasIp ? ['IP'] : []), ...(hasExposure ? ['Exposure'] : []), 'DNS', 'HTTP', 'Email', 'TLS', 'Inference', 'Commands', 'Raw JSON'];
+      const hasWhois = !!(report.modules.rdap && !report.modules.rdap.skipped);
+      const hasAxfr = !!(report.modules.axfr && !report.modules.axfr.skipped && (report.modules.axfr.attempts || []).length > 0);
+      const tabs = ['Findings', ...(hasIp ? ['IP'] : []), ...(hasExposure ? ['Exposure'] : []), 'DNS', 'HTTP', 'Email', 'TLS', ...(hasWhois ? ['Whois'] : []), ...(hasAxfr ? ['AXFR'] : []), 'Inference', 'Commands', 'Raw JSON'];
       const tabBar = h('div', { class: 'tabs' });
       const panels = {};
       tabs.forEach((t, i) => {
@@ -600,6 +602,58 @@ const homeSchema = [
       }
       panels['Email'] = emPanel;
       reportEl.appendChild(emPanel);
+
+      // Whois (RDAP)
+      if (hasWhois) {
+        const rdap = report.modules.rdap;
+        const whoisPanel = h('div', { class: 'panel hidden' });
+        if (!rdap.ok) {
+          whoisPanel.appendChild(h('div', { class: 'loading' }, rdap.error || 'RDAP lookup failed.'));
+        } else {
+          const d = rdap.daysUntilExpiry;
+          let expiryLabel = '-';
+          if (rdap.expiresAt) {
+            const tag = d == null ? '' : d < 0 ? ' · EXPIRED' : d < 14 ? ` · ${d}d left` : d < 60 ? ` · ${d}d left` : ` · ${d}d left`;
+            expiryLabel = rdap.expiresAt + tag;
+          }
+          whoisPanel.appendChild(kv([
+            ['Registrar', rdap.registrar || '-'],
+            ['Registered', rdap.registeredAt || '-'],
+            ['Expires', expiryLabel],
+            ['Last changed', rdap.lastChangedAt || '-'],
+            ['Abuse contact', rdap.abuseEmail || '-'],
+            ['DNSSEC signed', rdap.dnssecSigned == null ? '-' : String(rdap.dnssecSigned)],
+            ['Status flags', (rdap.status || []).join(', ') || '-'],
+            ['Nameservers', (rdap.nameservers || []).join(', ') || '-'],
+          ]));
+          whoisPanel.appendChild(h('p', { class: 'mono', style: 'opacity:.6;font-size:.85em;margin-top:12px' },
+            'Source: rdap.org → authoritative registry RDAP. Some ccTLDs (e.g., .il) have no RDAP server and are reported as "skipped" on the Raw JSON tab.'));
+        }
+        panels['Whois'] = whoisPanel;
+        reportEl.appendChild(whoisPanel);
+      }
+
+      // AXFR
+      if (hasAxfr) {
+        const axfr = report.modules.axfr;
+        const axfrPanel = h('div', { class: 'panel hidden' });
+        const openCount = (axfr.attempts || []).filter((a) => a.status === 'open').length;
+        if (openCount > 0) {
+          axfrPanel.appendChild(h('div', { class: 'finding severity-high' },
+            h('strong', {}, `⚠ ${openCount} nameserver(s) accepted AXFR`),
+            h('div', {}, 'This leaks your full zone. See Findings tab for remediation.')));
+        } else {
+          axfrPanel.appendChild(h('div', { class: 'loading' }, 'No nameserver allowed zone transfer (correct behavior).'));
+        }
+        axfrPanel.appendChild(kv((axfr.attempts || []).map((a) => [
+          a.ns,
+          `${a.status}${a.rcodeName ? ' · ' + a.rcodeName : ''}${a.ancount != null ? ' · ancount=' + a.ancount : ''}${a.elapsedMs != null ? ' · ' + a.elapsedMs + 'ms' : ''}${a.error ? ' · ' + a.error : ''}`,
+        ])));
+        axfrPanel.appendChild(h('p', { class: 'mono', style: 'opacity:.6;font-size:.85em;margin-top:12px' },
+          'Probes up to 2 of the zone\'s NS records on TCP/53. "refused" / "timeout" are the expected, correct outcomes.'));
+        panels['AXFR'] = axfrPanel;
+        reportEl.appendChild(axfrPanel);
+      }
 
       // TLS
       const tls = report.modules.tls;

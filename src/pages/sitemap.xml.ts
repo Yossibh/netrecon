@@ -8,6 +8,7 @@ const staticRoutes: Array<{ path: string; changefreq: string; priority: string }
   { path: '/about/',   changefreq: 'monthly', priority: '0.7' },
   { path: '/compare/', changefreq: 'monthly', priority: '0.8' },
   { path: '/decode/',  changefreq: 'monthly', priority: '0.8' },
+  { path: '/subnet/',  changefreq: 'monthly', priority: '0.8' },
   { path: '/mcp/',     changefreq: 'monthly', priority: '0.7' },
   { path: '/blog/',    changefreq: 'weekly',  priority: '0.8' },
 ];

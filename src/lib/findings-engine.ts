@@ -542,7 +542,112 @@ const livetlsRules: Rule[] = [
   },
 ];
 
-const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...livetlsRules, ...inferenceRules, ...ipRules, ...exposureRules];
+// RDAP rules ------------------------------------------------------------------
+const rdapRules: Rule[] = [
+  ({ modules, input }) => {
+    const r = modules.rdap;
+    if (!r?.ok || r.skipped || !input.domain) return [];
+    const d = r.daysUntilExpiry;
+    if (d == null) return [];
+    if (d < 0) {
+      return [
+        f(
+          'rdap.domain-expired',
+          'high',
+          `Domain has expired (${-d} day(s) ago)`,
+          'The registration expiration date is in the past. Until the registrar or registry reaches the redemption / pending-delete phase, the domain may still resolve; after that it becomes un-renewable and a hostile re-registration becomes possible.',
+          [
+            `expiresAt: ${r.expiresAt ?? 'unknown'}`,
+            r.registrar ? `registrar: ${r.registrar}` : '',
+          ].filter(Boolean),
+          ['Renew immediately via your registrar.', 'Enable auto-renew and lock the domain.'],
+          [`whois ${input.domain}`],
+          'rdap',
+        ),
+      ];
+    }
+    if (d < 14) {
+      return [
+        f(
+          'rdap.domain-expiring-soon',
+          'high',
+          `Domain expires in ${d} day(s)`,
+          'Registration expiration is imminent. If it lapses, the domain will stop resolving once the registrar flips it into hold/redemption.',
+          [`expiresAt: ${r.expiresAt}`, r.registrar ? `registrar: ${r.registrar}` : ''].filter(Boolean),
+          ['Renew now.', 'Enable auto-renew.', 'Enable registrar lock.'],
+          [`whois ${input.domain}`],
+          'rdap',
+        ),
+      ];
+    }
+    if (d < 60) {
+      return [
+        f(
+          'rdap.domain-expiring',
+          'medium',
+          `Domain expires in ${d} day(s)`,
+          'Expiration is within the risk window. Renewals can get stuck on payment/auth failures — renew early to leave a buffer.',
+          [`expiresAt: ${r.expiresAt}`, r.registrar ? `registrar: ${r.registrar}` : ''].filter(Boolean),
+          ['Renew or verify auto-renew is active.'],
+          [`whois ${input.domain}`],
+          'rdap',
+        ),
+      ];
+    }
+    return [];
+  },
+  ({ modules }) => {
+    const r = modules.rdap;
+    if (!r?.ok || r.skipped) return [];
+    const statuses = (r.status ?? []).map((s) => s.toLowerCase());
+    const locked = statuses.some((s) => s.includes('client transfer prohibited')) ||
+      statuses.some((s) => s.includes('client update prohibited'));
+    if (!locked && r.domain && statuses.length > 0) {
+      return [
+        f(
+          'rdap.registrar-lock-missing',
+          'medium',
+          'Registrar lock does not appear to be set',
+          'Without a registrar lock (clientTransferProhibited / clientUpdateProhibited), an attacker who compromises the registrar account can transfer the domain or change nameservers with minimal friction.',
+          [`status: ${r.status?.join(', ') || 'none'}`],
+          ['Enable registrar lock in the registrar control panel.'],
+          [],
+          'rdap',
+        ),
+      ];
+    }
+    return [];
+  },
+];
+
+// AXFR rules ------------------------------------------------------------------
+const axfrRules: Rule[] = [
+  ({ modules, input }) => {
+    const a = modules.axfr;
+    if (!a?.ok || a.skipped || !input.domain) return [];
+    const open = a.attempts.filter((at) => at.status === 'open').map((at) => at.ns);
+    if (open.length === 0) return [];
+    return [
+      f(
+        'ns.open-zone-transfer',
+        'high',
+        `Nameserver allows AXFR zone transfer (${open.length} server${open.length > 1 ? 's' : ''})`,
+        'One or more authoritative nameservers responded to an AXFR query with a zone dump. This leaks every subdomain in the zone to anyone on the internet — attack-surface reconnaissance that is supposed to be hard becomes trivial. Restrict AXFR to known secondaries only.',
+        open.map((ns) => `open on: ${ns}`),
+        [
+          'Restrict AXFR via `allow-transfer` (BIND) / equivalent to your secondary NS IPs only.',
+          'Run `dig AXFR ' + input.domain + ' @<ns>` from outside to verify the fix.',
+        ],
+        open.map((ns) => `dig AXFR ${input.domain} @${ns}`),
+        'axfr',
+      ),
+    ];
+  },
+];
+
+
+
+const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...livetlsRules, ...inferenceRules, ...ipRules, ...exposureRules, ...rdapRules, ...axfrRules];
 
 export function runFindings(ctx: { input: NormalizedInput; modules: AnalyzeModules }): Finding[] {
   const findings: Finding[] = [];

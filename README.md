@@ -18,7 +18,8 @@ just dumps of raw records.
 A static-first site + edge functions that take a **domain, IP, or URL** and
 return a correlated report:
 
-- **Raw data:** DNS records, HTTP redirect chain, TLS cert chain, email posture.
+- **Raw data:** DNS records, HTTP redirect chain, TLS cert chain, email posture,
+  WHOIS/RDAP registration metadata, and AXFR zone-transfer probe.
 - **Interpreted findings:** rules that combine signals across modules (e.g.
   *CDN response headers are present but A-record ASN doesn't match the CDN —
   origin may be directly exposed*).

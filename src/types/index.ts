@@ -266,6 +266,45 @@ export interface PeerTlsModuleResult {
   fastPathError?: string;
 }
 
+export interface RdapModuleResult {
+  ok: boolean;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
+  domain: string;
+  ldhName?: string;
+  handle?: string;
+  status?: string[];
+  registrar?: string;
+  abuseEmail?: string;
+  registeredAt?: string;
+  expiresAt?: string;
+  lastChangedAt?: string;
+  daysUntilExpiry?: number | null;
+  nameservers?: string[];
+  dnssecSigned?: boolean;
+}
+
+export interface AxfrAttempt {
+  ns: string;
+  status: 'open' | 'refused' | 'other' | 'timeout' | 'error';
+  rcode?: number;
+  rcodeName?: string;
+  ancount?: number;
+  elapsedMs?: number;
+  error?: string;
+}
+
+export interface AxfrModuleResult {
+  ok: boolean;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
+  domain: string;
+  attempts: AxfrAttempt[];
+  openTransfer?: boolean;
+}
+
 export interface AnalyzeModules {
   dns?: DnsModuleResult;
   http?: HttpModuleResult;
@@ -275,6 +314,8 @@ export interface AnalyzeModules {
   inference?: InferenceModuleResult;
   ip?: IpModuleResult;
   exposure?: ExposureModuleResult;
+  rdap?: RdapModuleResult;
+  axfr?: AxfrModuleResult;
 }
 
 export interface AnalyzeReport {

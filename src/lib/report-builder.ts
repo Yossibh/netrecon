@@ -1,4 +1,4 @@
-import type { AnalyzeModules, AnalyzeReport, CompareReport, NormalizedInput, PeerTlsModuleResult } from '@/types';
+import type { AnalyzeModules, AnalyzeReport, CompareReport, NormalizedInput, PeerTlsModuleResult, AxfrModuleResult } from '@/types';
 import { detectInput, toProbeUrl } from './input-detection';
 import { resolveAll } from './providers/dns';
 import { inspectHttp } from './providers/http';
@@ -7,9 +7,10 @@ import { inspectTls } from './providers/tls';
 import { inferInfrastructure } from './providers/inference';
 import { analyzeIp } from './providers/ip';
 import { shodanHost, shodanDomain } from './providers/shodan';
-// tls-peer is dynamically imported below so the Astro static build (which
-// crawls tools.ts → report-builder transitively from mcp.astro) doesn't try
-// to resolve the Workers-only `cloudflare:sockets` module.
+import { lookupDomainRdap } from './providers/rdap';
+// tls-peer and axfr are dynamically imported below so the Astro static build
+// (which crawls tools.ts → report-builder transitively from mcp.astro) doesn't
+// try to resolve the Workers-only `cloudflare:sockets` module.
 import { runFindings, riskLevel } from './findings-engine';
 import { generateCommands } from './commands';
 
@@ -153,6 +154,37 @@ export async function buildReport(rawInput: string, opts: BuildReportOptions = {
     await Promise.all(shodanPromises);
   }
 
+  // RDAP (domain registration metadata). Domain-only. Free, no key.
+  if (domain) {
+    modules.rdap = await lookupDomainRdap(domain).catch((err) => ({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      domain,
+    }));
+  }
+
+  // AXFR probe — best-effort, Workers-only. Dynamically imported so the static
+  // build doesn't try to resolve `cloudflare:sockets`. Opt-out by setting
+  // mode === 'off' (same flag as live-peer-tls: if the user is skipping expensive
+  // probes, skip this one too).
+  if (domain && mode !== 'off') {
+    const nsNames = (modules.dns?.records.NS ?? [])
+      .map((r) => r.data.toLowerCase().replace(/\.$/, ''))
+      .filter(Boolean);
+    if (nsNames.length) {
+      modules.axfr = await import('./providers/axfr')
+        .then(({ probeAxfr }) => probeAxfr(domain, nsNames))
+        .catch((err) => ({
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          domain,
+          attempts: [],
+        } satisfies AxfrModuleResult));
+    } else {
+      modules.axfr = { ok: true, skipped: true, skipReason: 'No NS records available', domain, attempts: [] };
+    }
+  }
+
   const findings = runFindings({ input, modules });
   const risk = riskLevel(findings);
 
@@ -177,6 +209,8 @@ export async function buildReport(rawInput: string, opts: BuildReportOptions = {
       inference: modules.inference,
       ip: modules.ip,
       exposure: modules.exposure,
+      rdap: modules.rdap,
+      axfr: modules.axfr,
     },
     meta: {
       generatedAt: new Date().toISOString(),
