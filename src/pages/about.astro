@@ -1,31 +1,31 @@
 ---
 import Layout from '../components/Layout.astro';
 
-// High-level career headline only — details live on LinkedIn.
+// High-level career headline only - details live on LinkedIn.
 const careerHighlights = [
-  { label: 'Now', text: 'Senior SRE @ Microsoft — Data & Research Enablement (2022 → present)' },
-  { label: 'Before that', text: '9 years at AT&T — DevOps Team Lead, Innovation Lead, DevOps / integration leadership' },
-  { label: 'Startup', text: 'CTO & co-founder @ VADO Security — unidirectional networks / cross-domain data diode' },
+  { label: 'Now', text: 'Senior SRE @ Microsoft - Data & Research Enablement' },
+  { label: 'Before that', text: 'AT&T - DevOps Team Lead, Innovation Lead, DevOps / integration leadership' },
+  { label: 'Startup', text: 'CTO & co-founder @ VADO Security - unidirectional networks / cross-domain data diode' },
   { label: 'Earlier', text: 'Head of Engineering at Oasis Communication Technologies · VoIP / backbone / hosting-sec at Internet Gold' },
-  { label: 'Span', text: '25+ years across telco, enterprise, cybersecurity, and cloud — individual contributor through head-of-engineering' },
+  { label: 'Span', text: 'Across telco, enterprise, cybersecurity, and cloud - individual contributor through head-of-engineering' },
 ];
 
 const credentials = [
-  { label: 'Certified CISO', note: 'Chief Information Security Officer — See-Security College' },
+  { label: 'Certified CISO', note: 'Chief Information Security Officer - See-Security College' },
   { label: 'DevSecOps Foundations', note: 'SSDLC, policy-as-code mindset' },
   { label: '4 issued / filed patents', note: 'unidirectional networking + software-defined sockets' },
   { label: 'Co-founder × 2', note: 'built engineering orgs from zero' },
 ];
 
 const patents = [
-  { title: 'Software-Defined Socket Activation', id: 'US 10,523,584', year: '2019' },
-  { title: 'Directing data packets by a virtual switch over a unidirectional medium', id: 'WO2018104947A1', year: '2017' },
-  { title: 'Position-based communication routing', id: 'US 2018/0063295', year: '2018' },
-  { title: 'System and method for unidirectional communication management', id: 'US 2020/0304600 A1', year: '2020' },
+  { title: 'Software-Defined Socket Activation', id: 'US 10,523,584' },
+  { title: 'Directing data packets by a virtual switch over a unidirectional medium', id: 'WO2018104947A1' },
+  { title: 'Position-based communication routing', id: 'US 2018/0063295' },
+  { title: 'System and method for unidirectional communication management', id: 'US 2020/0304600 A1' },
 ];
 ---
 
-<Layout title="Yossi Ben Hagai — Senior SRE · Platform · Security & Networking · Applied AI">
+<Layout title="Yossi Ben Hagai - Senior SRE · Platform · Security & Networking · Applied AI">
   <section class="about-hero">
     <div class="prompt mono">
       <span class="p-host">yossi@netrecon</span>:<span class="p-path">~/about</span>$ <span class="typed">whoami --summary</span>
@@ -36,8 +36,7 @@ const patents = [
       Senior SRE at Microsoft. Previously DevOps leadership at AT&amp;T, CTO of a cybersecurity
       startup, head of engineering at telco-scale networking shops. I work at the intersection of
       <strong>site reliability</strong>, <strong>software engineering</strong>,
-      <strong>security &amp; networking</strong>, and <strong>applied AI</strong> — and I've been
-      shipping at that intersection for 25+ years.
+      <strong>security &amp; networking</strong>, and <strong>applied AI</strong>.
     </p>
     <div class="about-pills mono">
       <span class="pill">senior sre</span>
@@ -46,14 +45,14 @@ const patents = [
       <span class="pill">k8s · iac</span>
       <span class="pill">llmops · rag · mcp</span>
       <span class="pill">4 patents</span>
-      <span class="pill">cciso</span>
+      <span class="pill">ciso</span>
     </div>
   </section>
 
   <section class="about-section">
     <h2 class="about-h2">Where I work</h2>
     <p class="about-muted">
-      Four disciplines, one operator. The most useful work lives on the edges between them —
+      Four disciplines, one operator. The most useful work lives on the edges between them -
       and increasingly, in the middle.
     </p>
 
@@ -61,7 +60,7 @@ const patents = [
       <div class="q-card q-sre">
         <span class="q-tag mono">01 · sre / platform</span>
         <strong>Keep it up. Make it cheap. Tell the story.</strong>
-        <span class="q-meta mono">SLOs · OpenTelemetry · K8s · GitOps · FinOps · eBPF</span>
+        <span class="q-meta mono">SLOs · OpenTelemetry · K8s · ADO · FinOps · Azure</span>
       </div>
       <div class="q-card q-ai">
         <span class="q-tag mono">02 · applied AI</span>
@@ -71,19 +70,19 @@ const patents = [
       <div class="q-card q-swe">
         <span class="q-tag mono">03 · software</span>
         <strong>Cloud-native, IaC-first, supply-chain-aware.</strong>
-        <span class="q-meta mono">TS · Python · Go · Terraform · containers · SBOM/SLSA</span>
+        <span class="q-meta mono">C# · Python · Go · Terraform · containers · SBOM/SLSA</span>
       </div>
       <div class="q-card q-sec">
         <span class="q-tag mono">04 · security &amp; networking</span>
         <strong>Zero trust. Real handshakes. Hard guarantees.</strong>
-        <span class="q-meta mono">Zero Trust · SASE · PKI · OPA · cross-domain</span>
+        <span class="q-meta mono">Zero Trust · Entra · PKI · PenTesting · cross-domain</span>
       </div>
 
       <span class="q-edge q-edge-top mono" aria-hidden="true">AIOps · LLMOps</span>
       <span class="q-edge q-edge-bottom mono" aria-hidden="true">DevSecOps · supply-chain security</span>
       <span class="q-edge q-edge-left mono" aria-hidden="true">Platform engineering</span>
       <span class="q-edge q-edge-right mono" aria-hidden="true">AI safety · secure agents</span>
-      <span class="q-center mono" aria-hidden="true">senior&nbsp;work</span>
+      <span class="q-center mono" aria-hidden="true">sweet&nbsp;spot</span>
     </div>
   </section>
 
@@ -115,14 +114,14 @@ const patents = [
   <section class="about-section">
     <h2 class="about-h2">Patents</h2>
     <p class="about-muted">
-      Three on unidirectional / cross-domain networking — the kind of networking where
+      Three on unidirectional / cross-domain networking - the kind of networking where
       <em>"just retry"</em> is not an option.
     </p>
     <ul class="patent-list">
       {patents.map((p) => (
         <li class="patent">
           <span class="patent-title">{p.title}</span>
-          <span class="patent-meta mono">{p.id} · {p.year}</span>
+          <span class="patent-meta mono">{p.id}</span>
         </li>
       ))}
     </ul>
@@ -133,12 +132,8 @@ const patents = [
     <p>
       Senior SRE at Microsoft, working on data &amp; research enablement. On the side,
       writing and building small things that keep me fluent in modern runtimes, LLM-tooled
-      operations, and edge architectures — most recently <a href="/">netrecon</a>, a
+      operations, and edge architectures - such as <a href="/">netrecon</a>, a
       correlated-diagnostics tool with an MCP interface.
-    </p>
-    <p>
-      Open to talking about: platform engineering at scale, cross-domain / zero-trust
-      networking, LLM-driven operator tooling, and how senior engineers stay hands-on.
     </p>
   </section>
 
@@ -220,8 +215,8 @@ const patents = [
   }
   .q-edge-top    { top: 18px; left: 50%; transform: translateX(-50%); }
   .q-edge-bottom { bottom: 18px; left: 50%; transform: translateX(-50%); }
-  .q-edge-left   { top: 50%; left: -8px; transform: translateY(-50%) rotate(-90deg); transform-origin: center; }
-  .q-edge-right  { top: 50%; right: -8px; transform: translateY(-50%) rotate(90deg); transform-origin: center; }
+  .q-edge-left   { top: 50%; left: 6px;  writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
+  .q-edge-right  { top: 50%; right: 6px; writing-mode: vertical-rl; transform: translateY(-50%); }
 
   .q-center {
     position: absolute;
