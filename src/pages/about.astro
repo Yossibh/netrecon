@@ -1,33 +1,372 @@
 ---
 import Layout from '../components/Layout.astro';
+
+const patents = [
+  {
+    title: 'Software-Defined Socket Activation',
+    id: 'US 10,523,584',
+    year: '2019',
+    note: 'Systems-level networking: activate and route sockets dynamically via a software-defined control plane.',
+  },
+  {
+    title: 'Directing data packets by a virtual switch over a unidirectional medium',
+    id: 'WO2018104947A1',
+    year: '2017',
+    note: 'Cross-domain networking over data-diode-class links — packet steering where you can send but never receive.',
+  },
+  {
+    title: 'Position-based communication routing',
+    id: 'US 2018/0063295',
+    year: '2018',
+    note: 'Routing decisions keyed on spatial / positional signals rather than purely topological ones.',
+  },
+  {
+    title: 'System and method for unidirectional communication management',
+    id: 'US 2020/0304600 A1',
+    year: '2020',
+    note: 'Managing a fleet of unidirectional links as first-class network assets — monitoring, policy, recovery.',
+  },
+];
+
+const pillars = [
+  {
+    label: 'SRE',
+    headline: 'Production is the product.',
+    bullets: [
+      'Observability-first debugging: traces, metrics, logs as a single surface.',
+      'Error budgets, SLOs, incident response — the boring parts that keep systems honest.',
+      'Runbooks that say "run this exact command", not "investigate further".',
+    ],
+  },
+  {
+    label: 'Software engineering',
+    headline: 'Small, legible systems over clever ones.',
+    bullets: [
+      'TypeScript, Python, Go. Edge runtimes (Cloudflare Workers), Node, containers.',
+      'API-first design; every UI surface is backed by a documented endpoint.',
+      'Tests that catch regressions, not tests that count lines.',
+    ],
+  },
+  {
+    label: 'Security & networking',
+    headline: 'Four patents in cross-domain networking.',
+    bullets: [
+      'Unidirectional / data-diode networks and the protocols that survive on them.',
+      'TLS handshakes read from the wire, not from a library wrapper.',
+      'SSRF, input validation, rate-limiting, least-privilege bindings — treated as load-bearing, not paperwork.',
+    ],
+  },
+  {
+    label: 'Applied AI',
+    headline: 'LLMs as operational tooling, not demos.',
+    bullets: [
+      'MCP (Model Context Protocol) servers exposing real operational tools to agents.',
+      'Grounded retrieval over noisy sources; hand-written prompts beat clever scaffolding.',
+      'Agents as deterministic workflow drivers with a good narrator — not as oracles.',
+    ],
+  },
+];
 ---
-<Layout title="netrecon - about">
-  <article class="post">
-    <h1>About netrecon</h1>
-    <p class="meta">built by Yossi Ben Hagai · SRE · software engineer · security &amp; network · applied AI</p>
-    <p>
-      netrecon is an analysis and workflow tool for engineers who investigate real systems.
-      It is not another commodity DNS lookup site. Every module contributes to a correlated report:
-      raw data, interpreted findings, likely root causes, reproducible commands, and machine-readable JSON.
+
+<Layout title="Yossi Ben Hagai — SRE, software engineer, security & networking, applied AI">
+  <section class="about-hero">
+    <div class="prompt mono">
+      <span class="p-host">yossi@netrecon</span>:<span class="p-path">~/about</span>$ <span class="typed">cat who.md</span>
+    </div>
+
+    <h1 class="about-h1">Yossi Ben Hagai</h1>
+    <p class="about-lede">
+      I build reliable systems and the tools people use to keep them reliable.
+      My work sits at the intersection of <strong>SRE</strong>, <strong>software engineering</strong>,
+      <strong>security and networking</strong>, and <strong>applied AI</strong> — usually all four
+      in the same week.
     </p>
-    <h2>Why it exists</h2>
-    <p>
-      Most lookup tools dump information. They leave the hardest part - interpretation - to you. When
-      something is wrong in production, you don't need 9 browser tabs of DNS records, header dumps,
-      and cert timelines. You need <em>"the CDN is in front of this domain but the A record is your
-      origin ASN, so the origin is probably directly reachable"</em> in one sentence.
+
+    <div class="about-pills mono">
+      <span class="pill">sre</span>
+      <span class="pill">software</span>
+      <span class="pill">security</span>
+      <span class="pill">networking</span>
+      <span class="pill">applied-ai</span>
+      <span class="pill">4 patents</span>
+    </div>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">What I work on</h2>
+    <div class="pillar-grid">
+      {pillars.map((p) => (
+        <article class="pillar-card">
+          <header>
+            <span class="pillar-label mono">{p.label}</span>
+            <h3 class="pillar-headline">{p.headline}</h3>
+          </header>
+          <ul class="pillar-bullets">
+            {p.bullets.map((b) => <li>{b}</li>)}
+          </ul>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Selected work</h2>
+
+    <article class="work-item">
+      <div class="work-head">
+        <h3 class="work-title">netrecon</h3>
+        <span class="work-meta mono">correlated network diagnostics · <a href="https://netrecon.pages.dev/">netrecon.pages.dev</a></span>
+      </div>
+      <p>
+        A developer-focused network diagnostics platform that rejects the "dump of raw records" pattern.
+        Users enter a domain, IP, or URL; the app auto-detects input type, runs DNS / HTTP / TLS /
+        email-posture / CDN-inference checks in parallel, and returns <em>correlated findings</em> —
+        raw data, interpreted signals, likely root causes, and reproducible commands.
+      </p>
+      <ul class="work-bullets">
+        <li>Cloudflare Pages + Functions + Workers; zero-cost baseline, scales horizontally by design.</li>
+        <li>Live peer-TLS inspection: hand-crafted TLS 1.2 ClientHello over raw TCP; headless-Chromium fallback for Cloudflare-fronted and TLS 1.3-only targets.</li>
+        <li>MCP server at <a href="/mcp"><code>/api/mcp</code></a> — every module is a tool agents can call.</li>
+        <li>Rate limiting, SSRF guards, input validation implemented in-code (no WAF dependency).</li>
+        <li>Content-aware: <a href="/decode">decoder</a>, <a href="/blog">blog</a>, <a href="/compare">compare</a>, RSS.</li>
+      </ul>
+      <div class="work-links mono">
+        <a href="/">try it</a>
+        <span class="sep">·</span>
+        <a href="/mcp">MCP docs</a>
+        <span class="sep">·</span>
+        <a href="/blog">blog</a>
+      </div>
+    </article>
+
+    <article class="work-item">
+      <div class="work-head">
+        <h3 class="work-title">UC Voice · AT&amp;T Unified Communications Central</h3>
+        <span class="work-meta mono">2013 – 2014 · cloud UC client for smart devices and PCs</span>
+      </div>
+      <p>
+        Contributed to AT&amp;T UC Central — a cloud-based unified-communications client that pulled
+        disparate telephony and UC services behind a single presence-aware interface, extending
+        enterprise voice and messaging across desktops and mobile consistently inside and outside
+        the office.
+      </p>
+    </article>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Patents</h2>
+    <p class="about-muted">
+      Four issued / filed patents. Three of them sit in the unidirectional-networking and
+      cross-domain space — the kind of hard-guarantee networking where you can't just retry.
     </p>
-    <h2>Design principles</h2>
-    <ul>
-      <li><strong>Correlation over concatenation.</strong> Findings combine signals across modules.</li>
-      <li><strong>Reproducibility.</strong> Every check has a copy-paste command.</li>
-      <li><strong>API-first.</strong> <code>GET /api/analyze?input=…</code> returns the same report the UI renders.</li>
-      <li><strong>MCP-ready.</strong> Every module is a registered tool (<code>/api/tools</code>). Wiring an MCP server is a thin adapter layer.</li>
-      <li><strong>Honest about limitations.</strong> See <code>docs/limitations.md</code> in the repository.</li>
+    <ul class="patent-list">
+      {patents.map((p) => (
+        <li class="patent">
+          <div class="patent-head">
+            <span class="patent-title">{p.title}</span>
+            <span class="patent-meta mono">{p.id} · {p.year}</span>
+          </div>
+          <p class="patent-note">{p.note}</p>
+        </li>
+      ))}
     </ul>
-    <h2>Contact</h2>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Now</h2>
     <p>
-      LinkedIn: <a href="https://www.linkedin.com/in/yossibenhagai/" target="_blank" rel="noopener">linkedin.com/in/yossibenhagai</a>
+      Building <a href="/">netrecon</a> as a public-facing portfolio of how I think about
+      correlated diagnostics, edge runtimes, and LLM-tooled operations. Writing about it as I go —
+      see the <a href="/blog">blog</a>. Open to talking about SRE platform work, edge computing,
+      security-first networking, and LLM-driven operator tooling.
     </p>
-  </article>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Contact</h2>
+    <ul class="contact-list mono">
+      <li><span class="c-k">linkedin</span> <a href="https://www.linkedin.com/in/yossibenhagai/" target="_blank" rel="noopener">linkedin.com/in/yossibenhagai</a></li>
+      <li><span class="c-k">github</span> <a href="https://github.com/Yossibh" target="_blank" rel="noopener">github.com/Yossibh</a></li>
+      <li><span class="c-k">site</span> <a href="https://netrecon.pages.dev/">netrecon.pages.dev</a></li>
+    </ul>
+  </section>
 </Layout>
+
+<style>
+  .about-hero {
+    padding: 32px 0 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .about-hero .prompt {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg-dim);
+    margin: 0 0 18px;
+  }
+  .about-hero .prompt .p-host { color: var(--accent); }
+  .about-hero .prompt .p-path { color: var(--low); }
+  .about-hero .prompt .typed { color: var(--fg); }
+
+  .about-h1 {
+    font-size: 36px;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .about-lede {
+    font-size: 17px;
+    color: var(--fg-dim);
+    max-width: 720px;
+    margin: 0 0 18px;
+  }
+  .about-lede strong { color: var(--fg); font-weight: 600; }
+
+  .about-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 12px;
+  }
+  .about-pills .pill {
+    font-size: 12px;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    background: var(--bg-elev);
+  }
+
+  .about-section {
+    padding: 24px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .about-section:last-of-type { border-bottom: 0; }
+
+  .about-h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    font-family: var(--mono);
+    margin: 0 0 18px;
+    font-weight: 600;
+  }
+  .about-h2::before { content: "# "; color: var(--fg-dim); }
+
+  .about-muted { color: var(--fg-dim); max-width: 720px; }
+
+  .pillar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .pillar-card {
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    border-radius: 6px;
+    padding: 16px 18px;
+  }
+  .pillar-card header { margin-bottom: 10px; }
+  .pillar-label {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 8px;
+    border: 1px solid var(--accent-dim);
+    border-radius: 4px;
+  }
+  .pillar-headline {
+    font-size: 16px;
+    margin: 10px 0 0;
+    font-weight: 600;
+  }
+  .pillar-bullets {
+    margin: 8px 0 0;
+    padding: 0 0 0 1.2em;
+    color: var(--fg-dim);
+    font-size: 14px;
+  }
+  .pillar-bullets li { margin: 4px 0; }
+
+  .work-item {
+    padding: 18px 0;
+    border-top: 1px solid var(--border);
+  }
+  .work-item:first-of-type { border-top: 0; padding-top: 0; }
+  .work-head { margin-bottom: 8px; }
+  .work-title {
+    font-size: 20px;
+    margin: 0;
+    font-weight: 600;
+  }
+  .work-meta {
+    display: block;
+    font-size: 12px;
+    color: var(--fg-dim);
+    margin-top: 2px;
+  }
+  .work-bullets {
+    margin: 8px 0 12px;
+    padding: 0 0 0 1.2em;
+    color: var(--fg-dim);
+    font-size: 14px;
+  }
+  .work-bullets li { margin: 4px 0; }
+  .work-links { font-size: 13px; color: var(--fg-dim); }
+  .work-links .sep { margin: 0 6px; color: var(--border); }
+
+  .patent-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .patent {
+    border-left: 2px solid var(--accent-dim);
+    padding: 6px 0 6px 14px;
+  }
+  .patent-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .patent-title {
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .patent-meta {
+    font-size: 12px;
+    color: var(--fg-dim);
+  }
+  .patent-note {
+    margin: 4px 0 0;
+    color: var(--fg-dim);
+    font-size: 14px;
+  }
+
+  .contact-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+  }
+  .contact-list li { padding: 4px 0; }
+  .contact-list .c-k {
+    display: inline-block;
+    min-width: 90px;
+    color: var(--fg-dim);
+  }
+  .contact-list .c-k::after { content: ":"; }
+
+  @media (max-width: 640px) {
+    .about-h1 { font-size: 28px; }
+    .about-lede { font-size: 15px; }
+  }
+</style>
+
