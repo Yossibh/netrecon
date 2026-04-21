@@ -134,7 +134,8 @@ import Layout from '../components/Layout.astro';
       const stages = [
         { id: 'detect',    label: 'detect input',        at: 80 },
         { id: 'dns',       label: 'DNS records',         at: 250 },
-        { id: 'http',      label: 'HTTP probe + headers', at: 550 },
+        { id: 'ip',        label: 'IP intel + geo/ASN',  at: 400 },
+        { id: 'http',      label: 'HTTP probe + headers', at: 600 },
         { id: 'email',     label: 'email posture',       at: 900 },
         { id: 'tls',       label: 'TLS / CT logs',       at: 1200 },
         { id: 'inference', label: 'CDN / ASN inference', at: 1600 },
@@ -266,8 +267,9 @@ import Layout from '../components/Layout.astro';
       );
       reportEl.appendChild(summary);
 
-      // Tabs
-      const tabs = ['Findings', 'DNS', 'HTTP', 'Email', 'TLS', 'Inference', 'Commands', 'Raw JSON'];
+      // Tabs (IP tab only when there's ip data)
+      const hasIp = !!report.modules.ip;
+      const tabs = ['Findings', ...(hasIp ? ['IP'] : []), 'DNS', 'HTTP', 'Email', 'TLS', 'Inference', 'Commands', 'Raw JSON'];
       const tabBar = h('div', { class: 'tabs' });
       const panels = {};
       tabs.forEach((t, i) => {
@@ -299,6 +301,29 @@ import Layout from '../components/Layout.astro';
       }
       panels['Findings'] = findingsPanel;
       reportEl.appendChild(findingsPanel);
+
+      // IP (only when present)
+      if (hasIp) {
+        const ip = report.modules.ip;
+        const ipPanel = h('div', { class: 'panel hidden' });
+        const geo = ip.geo || {};
+        ipPanel.appendChild(kv([
+          ['IP', ip.ip],
+          ['Version', ip.version.toUpperCase()],
+          ['Scope', ip.scope + (ip.anycast?.likely ? ' · anycast' : '')],
+          ['Country', [geo.city, geo.region, geo.country ? `${geo.country} (${geo.countryCode || ''})` : ''].filter(Boolean).join(', ') || '-'],
+          ['Coordinates', (geo.latitude != null && geo.longitude != null) ? `${geo.latitude}, ${geo.longitude}` : '-'],
+          ['Timezone', geo.timezone || '-'],
+          ['Organization', geo.org || geo.isp || '-'],
+          ['ASN', ip.asn ? `AS${ip.asn.asn}${ip.asn.owner ? ' ' + ip.asn.owner : ''}` : '-'],
+          ['Registry', ip.asn?.registry || '-'],
+          ['PTR', ip.ptr.length ? ip.ptr.join(', ') : '-'],
+          ['Notes', ip.notes.join('; ') || '-'],
+          ['Anycast hint', ip.anycast?.reason || '-'],
+        ]));
+        panels['IP'] = ipPanel;
+        reportEl.appendChild(ipPanel);
+      }
 
       // DNS
       const dns = report.modules.dns;

@@ -24,9 +24,18 @@ export function commandsForIp(ip: string, ipVersion: 'v4' | 'v6' | undefined): s
   const cmds = [
     `whois ${ip}`,
     `dig -x ${ip} +short`,
+    ipVersion === 'v6' ? `traceroute -6 ${ip}` : `traceroute ${ip}`,
+    ipVersion === 'v6' ? `mtr -6 -rwc 10 ${ip}` : `mtr -rwc 10 ${ip}`,
   ];
-  if (ipVersion === 'v4') cmds.push(`curl -sSI http://${ip}/`);
-  if (ipVersion === 'v6') cmds.push(`curl -sSI -g 'http://[${ip}]/'`);
+  if (ipVersion === 'v4') {
+    cmds.push(`curl -sSI http://${ip}/`);
+    cmds.push(`curl -sSIk https://${ip}/`);
+    cmds.push(`openssl s_client -connect ${ip}:443 </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates`);
+  }
+  if (ipVersion === 'v6') {
+    cmds.push(`curl -sSI -g 'http://[${ip}]/'`);
+    cmds.push(`curl -sSIk -g 'https://[${ip}]/'`);
+  }
   return cmds;
 }
 

@@ -5,6 +5,7 @@ import { inspectHttp } from './providers/http';
 import { analyzeEmail } from './providers/email';
 import { inspectTls } from './providers/tls';
 import { inferInfrastructure } from './providers/inference';
+import { analyzeIp } from './providers/ip';
 import { runFindings, riskLevel } from './findings-engine';
 import { generateCommands } from './commands';
 
@@ -16,11 +17,10 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
 
   const modules: AnalyzeModules = {};
 
-  // DNS only makes sense for a domain (or URL with hostname).
   const domain = input.domain;
   const probeUrl = toProbeUrl(input);
 
-  // Run DNS first; HTTP/Email/TLS/Inference can then use it for correlation.
+  // DNS only makes sense for a domain (or URL with hostname).
   if (domain) {
     modules.dns = await resolveAll(domain).catch((err) => ({
       ok: false,
@@ -28,6 +28,21 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
       records: { A: [], AAAA: [], CNAME: [], MX: [], TXT: [], NS: [], CAA: [], SOA: [] },
       hasIPv6: false,
       hasCAA: false,
+    }));
+  }
+
+  // IP analysis: bare IP inputs, OR URLs whose host is an IP.
+  if (input.ip && input.ipVersion) {
+    modules.ip = await analyzeIp(input.ip, input.ipVersion).catch((err) => ({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      ip: input.ip!,
+      version: input.ipVersion!,
+      scope: 'public' as const,
+      notes: [],
+      ptr: [],
+      geo: null,
+      asn: null,
     }));
   }
 
@@ -61,12 +76,18 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
         ok: true,
         source: 'unavailable',
         skipped: true,
-        skipReason: 'TLS inspection requires a domain',
+        skipReason: 'TLS inspection requires a domain (CT logs index by hostname, not IP)',
+        liveTls: http.liveTls,
       } satisfies AnalyzeModules['tls']);
   modules.http = http;
   modules.email = email;
   modules.tls = tls;
-  modules.inference = await inferInfrastructure(modules.dns, modules.http);
+  const directIp = modules.ip?.asn
+    ? { ip: modules.ip.ip, asn: modules.ip.asn.asn, owner: modules.ip.asn.owner, cc: modules.ip.asn.cc, registry: modules.ip.asn.registry }
+    : modules.ip
+      ? { ip: modules.ip.ip }
+      : undefined;
+  modules.inference = await inferInfrastructure(modules.dns, modules.http, directIp);
 
   const findings = runFindings({ input, modules });
   const risk = riskLevel(findings);
@@ -89,6 +110,7 @@ export async function buildReport(rawInput: string): Promise<AnalyzeReport> {
       email: modules.email,
       tls: modules.tls,
       inference: modules.inference,
+      ip: modules.ip,
     },
     meta: {
       generatedAt: new Date().toISOString(),
@@ -106,6 +128,17 @@ function summaryTitle(input: NormalizedInput): string {
 
 function buildHighlights(input: NormalizedInput, modules: AnalyzeModules, findingsCount: number): string[] {
   const out: string[] = [];
+  if (modules.ip) {
+    const ip = modules.ip;
+    if (ip.scope !== 'public') {
+      out.push(`IP: ${ip.scope}${ip.notes[0] ? ` (${ip.notes[0]})` : ''}`);
+    } else {
+      const geo = ip.geo ? `${[ip.geo.city, ip.geo.region, ip.geo.countryCode].filter(Boolean).join(', ')}` : '';
+      const asn = ip.asn ? `AS${ip.asn.asn}${ip.asn.owner ? ` ${ip.asn.owner}` : ''}` : '';
+      const parts = [geo, asn, ip.ptr[0] ? `PTR ${ip.ptr[0]}` : '', ip.anycast ? 'anycast' : ''].filter(Boolean);
+      if (parts.length) out.push(`IP: ${parts.join(' · ')}`);
+    }
+  }
   if (modules.dns?.ok) {
     out.push(
       `DNS: A=${modules.dns.records.A.length}, AAAA=${modules.dns.records.AAAA.length}, MX=${modules.dns.records.MX.length}, TXT=${modules.dns.records.TXT.length}`

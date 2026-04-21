@@ -312,7 +312,75 @@ const inferenceRules: Rule[] = [
   },
 ];
 
-const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...inferenceRules];
+const ipRules: Rule[] = [
+  ({ modules }) => {
+    const ip = modules.ip;
+    if (!ip?.ok) return [];
+    const out: Finding[] = [];
+    if (ip.scope === 'private' || ip.scope === 'loopback' || ip.scope === 'link-local' || ip.scope === 'cgnat') {
+      out.push(
+        f(
+          `ip.non-routable-${ip.scope}`,
+          'medium',
+          `Non-public address (${ip.scope})`,
+          `This address is in a ${ip.scope} range and is not reachable from the public internet. External diagnostics (ASN, geo, PTR) have been skipped.`,
+          ip.notes,
+          [
+            'Confirm whether you meant to share a public IP.',
+            'If this IP is exposed on a router/NAT boundary, use the public egress IP instead.',
+          ],
+          [`ip a | grep ${ip.ip}`, `traceroute ${ip.ip}`],
+          'ip'
+        )
+      );
+    }
+    if (ip.scope === 'documentation' || ip.scope === 'reserved' || ip.scope === 'benchmark' || ip.scope === 'unspecified' || ip.scope === 'multicast') {
+      out.push(
+        f(
+          `ip.special-use-${ip.scope}`,
+          'low',
+          `Special-use address (${ip.scope})`,
+          'This address is reserved by IANA and should not appear in production routing.',
+          ip.notes,
+          ['Double-check whether a real address was intended here.'],
+          [],
+          'ip'
+        )
+      );
+    }
+    if (ip.scope === 'public' && ip.ptr.length === 0) {
+      out.push(
+        f(
+          'ip.missing-ptr',
+          'info',
+          'No reverse DNS (PTR) record',
+          'The address has no PTR record. PTR is optional but helpful for mail reputation, traceroute readability, and operational debugging.',
+          [],
+          ['If this IP hosts outbound mail, publish a matching PTR and forward A record.'],
+          [`dig -x ${ip.ip} +short`],
+          'ip'
+        )
+      );
+    }
+    if (ip.anycast?.likely) {
+      out.push(
+        f(
+          'ip.anycast-known',
+          'info',
+          'Known anycast address',
+          ip.anycast.reason + '. Measurements from different vantage points will hit different backend PoPs.',
+          [],
+          ['When comparing behaviour across regions, treat this IP as a logical endpoint, not a single host.'],
+          [],
+          'ip'
+        )
+      );
+    }
+    return out;
+  },
+];
+
+const ALL_RULES: Rule[] = [...dnsRules, ...emailRules, ...httpRules, ...tlsRules, ...inferenceRules, ...ipRules];
 
 export function runFindings(ctx: { input: NormalizedInput; modules: AnalyzeModules }): Finding[] {
   const findings: Finding[] = [];

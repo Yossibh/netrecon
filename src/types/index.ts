@@ -133,12 +133,46 @@ export interface InferenceModuleResult {
   originExposureRisk?: { risk: 'none' | 'low' | 'medium' | 'high'; reason: string };
 }
 
+export interface IpModuleResult {
+  ok: boolean;
+  error?: string;
+  ip: string;
+  version: 'v4' | 'v6';
+  scope:
+    | 'public'
+    | 'private'
+    | 'loopback'
+    | 'link-local'
+    | 'cgnat'
+    | 'multicast'
+    | 'reserved'
+    | 'documentation'
+    | 'unspecified'
+    | 'benchmark';
+  notes: string[];
+  anycast?: { likely: boolean; reason: string };
+  ptr: string[];
+  geo: {
+    country?: string;
+    countryCode?: string;
+    region?: string;
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+    timezone?: string;
+    org?: string;
+    isp?: string;
+  } | null;
+  asn: { asn: number; owner?: string; cc?: string; registry?: string } | null;
+}
+
 export interface AnalyzeModules {
   dns?: DnsModuleResult;
   http?: HttpModuleResult;
   email?: EmailModuleResult;
   tls?: TlsModuleResult;
   inference?: InferenceModuleResult;
+  ip?: IpModuleResult;
 }
 
 export interface AnalyzeReport {

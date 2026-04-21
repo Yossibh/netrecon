@@ -81,7 +81,8 @@ const CDN_SIGNATURES: CdnSignature[] = [
 
 export async function inferInfrastructure(
   dns: DnsModuleResult | undefined,
-  http: HttpModuleResult | undefined
+  http: HttpModuleResult | undefined,
+  directIp?: { ip: string; asn?: number; owner?: string; cc?: string; registry?: string }
 ): Promise<InferenceModuleResult> {
   const evidence: string[] = [];
   const proxyHints: string[] = [];
@@ -104,29 +105,33 @@ export async function inferInfrastructure(
     if (cdnName === sig.name) break;
   }
 
-  // ASN lookup for first A record
+  // ASN: prefer directIp (IP input) else first A record
   let asnInfo: InferenceModuleResult['asn'];
   const firstA = dns?.records.A[0]?.data;
-  if (firstA) {
+  const targetIp = directIp?.ip ?? firstA;
+  if (directIp?.asn) {
+    asnInfo = { ip: directIp.ip, asn: directIp.asn, owner: directIp.owner, cc: directIp.cc, registry: directIp.registry };
+    evidence.push(`${directIp.ip} -> AS${directIp.asn}${directIp.owner ? ` (${directIp.owner})` : ''}`);
+  } else if (targetIp) {
     try {
-      const asn = await lookupAsn(firstA);
+      const asn = await lookupAsn(targetIp);
       if (asn?.asn) {
         const owner = await asnOwner(asn.asn).catch(() => undefined);
-        asnInfo = { ip: firstA, asn: asn.asn, owner, cc: asn.cc, registry: asn.registry };
-        evidence.push(`A ${firstA} -> AS${asn.asn}${owner ? ` (${owner})` : ''}`);
-        // Infer CDN from ASN if not already
-        if (!cdnName) {
-          for (const sig of CDN_SIGNATURES) {
-            if (sig.asnIds?.includes(asn.asn)) {
-              cdnName = sig.name;
-              evidence.push(`ASN ${asn.asn} belongs to ${sig.name}`);
-              break;
-            }
-          }
-        }
+        asnInfo = { ip: targetIp, asn: asn.asn, owner, cc: asn.cc, registry: asn.registry };
+        evidence.push(`${targetIp} -> AS${asn.asn}${owner ? ` (${owner})` : ''}`);
       }
     } catch {
       /* ignore */
+    }
+  }
+
+  if (!cdnName && asnInfo?.asn) {
+    for (const sig of CDN_SIGNATURES) {
+      if (sig.asnIds?.includes(asnInfo.asn)) {
+        cdnName = sig.name;
+        evidence.push(`ASN ${asnInfo.asn} belongs to ${sig.name}`);
+        break;
+      }
     }
   }
 
