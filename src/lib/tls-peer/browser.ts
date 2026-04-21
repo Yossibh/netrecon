@@ -80,28 +80,40 @@ export async function inspectPeerTlsBrowser(
 
     const origin = port === 443 ? `https://${host}` : `https://${host}:${port}`;
 
-    // Capture the securityDetails from the main-frame navigation response.
-    // Puppeteer's response.securityDetails() gives us the high-level fields
-    // (protocol, cipher, issuer, subjectName, SANs, validFrom/validTo) that
-    // Chrome displays in the page info panel.
-    let secDetails: {
-      protocol?: string; subjectName?: string; issuer?: string;
-      validFrom?: number; validTo?: number; sanList?: string[];
+    // Listen for Security.visibleSecurityStateChanged BEFORE navigating.
+    // This event carries certificateSecurityState.certificate which is an
+    // array of base64 DER blobs — the full peer chain. It's more reliable
+    // than Network.getCertificate for CF-fronted targets where the latter
+    // returns an empty chain.
+    let securityStateDer: Uint8Array[] = [];
+    let securityStateInfo: {
+      protocol?: string; cipher?: string; keyExchange?: string;
+      subjectName?: string; issuer?: string; validFrom?: number; validTo?: number;
     } | undefined;
-    page.on('response', (res) => {
-      if (res.url() === origin + '/' || res.url() === origin || res.url().startsWith(origin)) {
-        const sd = res.securityDetails();
-        if (sd && !secDetails) {
-          secDetails = {
-            protocol: sd.protocol(),
-            subjectName: sd.subjectName(),
-            issuer: sd.issuer(),
-            validFrom: sd.validFrom(),
-            validTo: sd.validTo(),
-            sanList: (sd as unknown as { subjectAlternativeNames?: () => string[] }).subjectAlternativeNames?.() ?? [],
+    let securityStateReceived = false;
+    const securityStatePromise = new Promise<void>((resolve) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client.on('Security.visibleSecurityStateChanged', (evt: any) => {
+        try {
+          const vss = evt?.visibleSecurityState ?? {};
+          const cs = vss.certificateSecurityState;
+          if (!cs) return;
+          if (Array.isArray(cs.certificate) && cs.certificate.length) {
+            securityStateDer = cs.certificate.map((s: string) => base64ToBytes(s));
+          }
+          securityStateInfo = {
+            protocol: cs.protocol,
+            cipher: cs.cipher,
+            keyExchange: cs.keyExchange,
+            subjectName: cs.subjectName,
+            issuer: cs.issuer,
+            validFrom: cs.validFrom,
+            validTo: cs.validTo,
           };
-        }
-      }
+          securityStateReceived = true;
+          resolve();
+        } catch { /* ignore malformed events */ }
+      });
     });
 
     // 12s ceiling covers: DNS + TCP + TLS + first byte + settle. We only need
@@ -112,8 +124,24 @@ export async function inspectPeerTlsBrowser(
       return null;
     });
 
-    if (resp && !secDetails) {
-      // Fallback: pull from the resolved response directly.
+    // Give Security.visibleSecurityStateChanged up to 2s to arrive. It usually
+    // fires during navigation but sometimes lands just after domcontentloaded.
+    if (!securityStateReceived) {
+      await Promise.race([
+        securityStatePromise,
+        new Promise((r) => setTimeout(r, 2000)),
+      ]);
+    }
+
+    // Pull high-level security details from the final navigation response.
+    // Using resp directly (not a response listener) makes sure we're looking
+    // at the post-redirect response, not an intermediate 301 whose
+    // securityDetails may be sparse.
+    let secDetails: {
+      protocol?: string; subjectName?: string; issuer?: string;
+      validFrom?: number; validTo?: number; sanList?: string[];
+    } | undefined;
+    if (resp) {
       const sd = resp.securityDetails();
       if (sd) {
         secDetails = {
@@ -127,19 +155,49 @@ export async function inspectPeerTlsBrowser(
       }
     }
 
-    // Pull the raw DER chain. `Network.getCertificate` returns `tableNames`
-    // which is actually an array of base64-encoded DER certs (CDP's field
-    // naming is misleading). We pass each blob through the same pkijs
-    // extractor the raw-TCP probe uses, so the output shape is identical.
-    let derChain: Uint8Array[] = [];
-    try {
-      const rawOriginNoSlash = origin.replace(/\/+$/, '');
-      const certRes = await client.send('Network.getCertificate', { origin: rawOriginNoSlash }) as { tableNames?: string[] };
-      if (certRes?.tableNames?.length) {
-        derChain = certRes.tableNames.map((s) => base64ToBytes(s));
+    // Preferred DER source: Security.visibleSecurityStateChanged event.
+    let derChain: Uint8Array[] = securityStateDer;
+
+    // Secondary DER source: Network.getCertificate({origin}). Try final
+    // redirected origin first, then the requested one.
+    if (derChain.length === 0) {
+      const originsToTry: string[] = [];
+      try {
+        if (resp) {
+          const finalOrigin = new URL(resp.url()).origin;
+          if (finalOrigin) originsToTry.push(finalOrigin);
+        }
+      } catch { /* ignore URL parse errors */ }
+      const requestedOrigin = origin.replace(/\/+$/, '');
+      if (!originsToTry.includes(requestedOrigin)) originsToTry.push(requestedOrigin);
+      for (const o of originsToTry) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const certRes = await client.send('Network.getCertificate', { origin: o }) as { tableNames?: string[] };
+          if (certRes?.tableNames?.length) {
+            derChain = certRes.tableNames.map((s) => base64ToBytes(s));
+            break;
+          }
+        } catch { /* try next */ }
       }
-    } catch (err) {
-      notes.push(`Could not retrieve DER chain from CDP: ${(err as Error)?.message ?? String(err)}`);
+    }
+
+    // Merge: prefer structured securityStateInfo (issuer, subjectName, etc.)
+    // from the CDP Security event over Puppeteer's SecurityDetails, since the
+    // former is populated more reliably on CF edge.
+    if (securityStateInfo) {
+      secDetails = {
+        protocol: securityStateInfo.protocol ?? secDetails?.protocol,
+        subjectName: securityStateInfo.subjectName ?? secDetails?.subjectName,
+        issuer: securityStateInfo.issuer || secDetails?.issuer,
+        validFrom: securityStateInfo.validFrom ?? secDetails?.validFrom,
+        validTo: securityStateInfo.validTo ?? secDetails?.validTo,
+        sanList: secDetails?.sanList ?? [],
+      };
+    }
+
+    if (derChain.length === 0) {
+      notes.push('Raw DER chain not retrievable via CDP for this target. Using Chrome-parsed fields only; fingerprint/serial/sigAlg will be empty.');
     }
 
     const extracted: ExtractedCert[] = [];
@@ -149,6 +207,32 @@ export async function inspectPeerTlsBrowser(
         extracted.push(await extractCertFields(der));
       } catch (err) {
         notes.push(`Cert parse error: ${(err as Error)?.message ?? String(err)}`);
+      }
+    }
+
+    // Patch-up pass: if pkijs extraction succeeded but left issuer/subject
+    // empty (observed on some Cloudflare-edge certs where pkijs parses DER,
+    // extracts fingerprint/serial/sigAlg/notBefore/notAfter fine, but
+    // RelativeDistinguishedNames.typesAndValues comes back empty for the
+    // issuer RDN), fall back to the human-readable strings Chrome already
+    // parsed and exposed via CDP Security.visibleSecurityStateChanged /
+    // Puppeteer SecurityDetails. This guarantees users always see *some*
+    // issuer/subject value on the browser path, which is critical for TLS
+    // troubleshooting (issuer identifies the CA that signed the leaf).
+    if (extracted.length > 0 && secDetails) {
+      const leaf = extracted[0]!;
+      if (!leaf.issuer && secDetails.issuer) {
+        leaf.issuer = secDetails.issuer;
+        notes.push('Leaf issuer extracted via CDP security state (pkijs RDN decode returned empty for this cert).');
+      }
+      if (!leaf.subject && secDetails.subjectName) {
+        leaf.subject = secDetails.subjectName;
+      }
+      if ((!leaf.sans || leaf.sans.length === 0) && secDetails.sanList?.length) {
+        leaf.sans = secDetails.sanList;
+      }
+      if (!leaf.issuer) {
+        notes.push('Issuer could not be parsed from the certificate returned by Browser Rendering and was not exposed by Chrome. This is a known limitation for some Cloudflare-fronted targets; use the fast path (raw TCP) for authoritative issuer data on non-CF hosts.');
       }
     }
 

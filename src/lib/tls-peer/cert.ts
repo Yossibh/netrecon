@@ -62,6 +62,62 @@ function rdnToDn(rdnSequence: any): { cn: string; dn: string } {
     if (type === '2.5.4.3') cn = value;
     parts.push(`${label}=${value}`);
   }
+  // Fallback: pkijs has been observed to populate typesAndValues=[] for the
+  // issuer RDN on certain CloudFront / Cloudflare-edge certificates even
+  // though `valueBeforeDecode` still holds the raw DER. When that happens
+  // we re-parse the raw bytes ourselves by walking the ASN.1 tree.
+  if (arr.length === 0 && rdnSequence?.valueBeforeDecode) {
+    const raw: ArrayBuffer | undefined = rdnSequence.valueBeforeDecode;
+    try {
+      // A Name is SEQUENCE OF SET OF SEQUENCE{OID, value}. asn1js gives us
+      // the outer SEQUENCE; each element is a SET (RelativeDistinguishedName)
+      // whose element is a SEQUENCE(AttributeTypeAndValue).
+      const outer = asn1js.fromBER(raw);
+      if (outer.offset !== -1) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rdnSeq: any = outer.result;
+        // If the raw bytes *are* the Name (SEQUENCE) itself, its valueBlock.value
+        // is the array of RDN SETs. Some pkijs builds instead give back the
+        // inner contents directly — accept both shapes.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rdns: any[] = rdnSeq?.valueBlock?.value ?? [];
+        for (const rdn of rdns) {
+          // rdn is a SET, whose valueBlock.value is an array of AttributeTypeAndValue SEQUENCEs.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const attrs: any[] = rdn?.valueBlock?.value ?? [];
+          for (const attr of attrs) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const items: any[] = attr?.valueBlock?.value ?? [];
+            if (items.length < 2) continue;
+            const oidBlock = items[0];
+            const valBlock = items[1];
+            // asn1js ObjectIdentifier stores string in .valueBlock.toString() or .getValue()
+            let oid = '';
+            try { oid = String(oidBlock?.valueBlock?.toString?.() ?? oidBlock?.getValue?.() ?? ''); } catch {}
+            if (!oid && oidBlock?.valueBlock?.value) {
+              // some builds keep .value as the dotted string
+              oid = String(oidBlock.valueBlock.value);
+            }
+            // Strings come as PrintableString / UTF8String / etc. Their
+            // decoded text is at .valueBlock.value.
+            let value = '';
+            if (valBlock?.valueBlock?.value !== undefined && typeof valBlock.valueBlock.value === 'string') {
+              value = valBlock.valueBlock.value;
+            } else if (typeof valBlock?.toString === 'function') {
+              // Best-effort for other string types.
+              const s = String(valBlock);
+              // Strip pkijs' "UTF8String : foo" / "PrintableString : foo" prefix.
+              const m = /: (.+)$/.exec(s);
+              value = m ? m[1]! : s;
+            }
+            const label = oidName(oid);
+            if (oid === '2.5.4.3') cn = value;
+            parts.push(`${label}=${value}`);
+          }
+        }
+      }
+    } catch { /* swallow — leaves parts empty, caller handles */ }
+  }
   return { cn, dn: parts.join(', ') };
 }
 
