@@ -1,150 +1,155 @@
 ---
 import Layout from '../components/Layout.astro';
 
-// High-level career headline only - details live on LinkedIn.
-const careerHighlights = [
-  { label: 'Now', text: 'Senior SRE @ Microsoft Sentinel - Data & Research Enablement' },
-  { label: 'Before that', text: 'AT&T - DevOps Team Lead, Innovation Lead, DevOps / integration leadership' },
-  { label: 'Startup', text: 'CTO & co-founder @ VADO Security - unidirectional networks / cross-domain data diode' },
-  { label: 'Earlier', text: 'Head of Engineering at Oasis Communication Technologies · VoIP / backbone / hosting-sec at Internet Gold' },
-  { label: 'Span', text: 'Across telco, enterprise, cybersecurity, and cloud - individual contributor through head-of-engineering' },
+const modules = [
+  { name: 'DNS', text: 'A/AAAA, NS, MX, TXT/SPF, DMARC, DKIM hints, DNSSEC posture, DoH-backed.' },
+  { name: 'HTTP', text: 'Redirect chain, status, headers, HSTS, CSP, cookies, caching, inline body decoders.' },
+  { name: 'TLS', text: 'Certificate Transparency logs + live peer handshake (via headless browser fallback) where supported.' },
+  { name: 'Email posture', text: 'SPF alignment, DMARC policy strength, MX hygiene, DKIM presence hints.' },
+  { name: 'CDN / infra', text: 'ASN, anycast detection, front-door inference, PTR clustering, Shodan-facet exposure.' },
+  { name: 'Findings & fixes', text: 'Correlation across modules, likely root causes, and reproducible shell commands you can paste.' },
 ];
 
-const credentials = [
-  { label: 'Certified CISO', note: 'Chief Information Security Officer - See-Security College' },
-  { label: 'DevSecOps Foundations', note: 'SSDLC, policy-as-code mindset' },
-  { label: '4 issued / filed patents', note: 'unidirectional networking + software-defined sockets' },
-  { label: 'Co-founder × 2', note: 'built engineering orgs from zero' },
-];
-
-const patents = [
-  { title: 'Software-Defined Socket Activation', id: 'US 10,523,584' },
-  { title: 'Directing data packets by a virtual switch over a unidirectional medium', id: 'WO2018104947A1' },
-  { title: 'Position-based communication routing', id: 'US 2018/0063295' },
-  { title: 'System and method for unidirectional communication management', id: 'US 2020/0304600 A1' },
+const acknowledgments = [
+  { who: 'SSLMate Certspotter + crt.sh', for: 'Certificate Transparency logs' },
+  { who: 'Team Cymru', for: 'ASN / IP-to-network mapping' },
+  { who: 'ipwho.is', for: 'geolocation and ISP hints' },
+  { who: 'Shodan free facets', for: 'port / product / CVE exposure summaries' },
+  { who: 'Cloudflare', for: 'Pages, Functions, Browser Rendering' },
 ];
 ---
 
-<Layout title="Yossi Ben Hagai - Senior SRE · Platform · Security & Networking · Applied AI">
+<Layout title="About netrecon - correlated network diagnostics">
   <section class="about-hero">
     <div class="prompt mono">
-      <span class="p-host">yossi@netrecon</span>:<span class="p-path">~/about</span>$ <span class="typed">whoami --summary</span>
+      <span class="p-host">netrecon</span>:<span class="p-path">~/about</span>$ <span class="typed">cat README.md</span>
     </div>
 
-    <h1 class="about-h1">Yossi Ben Hagai</h1>
+    <h1 class="about-h1">netrecon</h1>
     <p class="about-lede">
-      Senior SRE at Microsoft. Previously DevOps leadership at AT&amp;T, CTO of a cybersecurity
-      startup, head of engineering at telco-scale networking shops. I work at the intersection of
-      <strong>site reliability</strong>, <strong>software engineering</strong>,
-      <strong>security &amp; networking</strong>, and <strong>applied AI</strong>.
+      Correlated network diagnostics for engineers. One input - domain, IP, or URL -
+      runs DNS, HTTP, TLS, email posture, and CDN / infra checks, correlates the
+      findings, and gives you likely root causes plus reproducible commands to
+      verify yourself.
     </p>
     <div class="about-pills mono">
-      <span class="pill">senior sre</span>
-      <span class="pill">platform eng</span>
-      <span class="pill">zero trust</span>
-      <span class="pill">k8s · iac</span>
-      <span class="pill">llmops · rag · mcp</span>
-      <span class="pill">4 patents</span>
-      <span class="pill">ciso</span>
+      <span class="pill">edge-only</span>
+      <span class="pill">stateless</span>
+      <span class="pill">no account</span>
+      <span class="pill">MCP-ready</span>
+      <span class="pill">JSON out</span>
     </div>
   </section>
 
   <section class="about-section">
-    <h2 class="about-h2">Where I work</h2>
+    <h2 class="about-h2">Why this, not another DNS checker</h2>
     <p class="about-muted">
-      Four disciplines, one operator. The most useful work lives on the edges between them -
-      and increasingly, in the middle.
+      Most tools give you a wall of raw data and leave the reasoning to you. netrecon is
+      opinionated: it runs multiple checks, correlates them, and tells you which finding
+      matters. You still get the raw data, the JSON, and the exact shell commands to
+      reproduce the result on your own machine - but the first thing you see is
+      <em>what's probably wrong</em>.
     </p>
-
-    <div class="quadrant" role="img" aria-label="Quadrant showing the four disciplines and their intersections">
-      <div class="q-card q-sre">
-        <span class="q-tag mono">01 · sre / platform</span>
-        <strong>Keep it up. Make it cheap. Tell the story.</strong>
-        <span class="q-meta mono">SLOs · data-engineering · K8s · ADO · FinOps · Azure</span>
-      </div>
-      <div class="q-card q-ai">
-        <span class="q-tag mono">02 · applied AI</span>
-        <strong>LLMs with guardrails, evals, and a job to do.</strong>
-        <span class="q-meta mono">RAG · Agents · MCP · evals · AIOps</span>
-      </div>
-      <div class="q-card q-swe">
-        <span class="q-tag mono">03 · software</span>
-        <strong>Cloud-native, IaC-first, supply-chain-aware.</strong>
-        <span class="q-meta mono">C# · Python · Go · IaC · containers · SDLC</span>
-      </div>
-      <div class="q-card q-sec">
-        <span class="q-tag mono">04 · security &amp; networking</span>
-        <strong>Zero trust. Real handshakes. Hard guarantees.</strong>
-        <span class="q-meta mono">Zero Trust · Entra · PKI · PenTesting · cross-domain</span>
-      </div>
-
-      <span class="q-edge q-edge-top mono" aria-hidden="true">AIOps · LLMOps</span>
-      <span class="q-edge q-edge-bottom mono" aria-hidden="true">DevSecOps · supply-chain security</span>
-      <span class="q-edge q-edge-left mono" aria-hidden="true">Platform engineering</span>
-      <span class="q-edge q-edge-right mono" aria-hidden="true">AI safety · secure agents</span>
-      <span class="q-center mono" aria-hidden="true">sweet&nbsp;spot</span>
-    </div>
+    <p class="about-muted">
+      Built for SREs who land on an unfamiliar site mid-incident and need a one-page
+      read of its posture, and for engineers who want DNS / HTTP / TLS / CDN / email
+      answered in one pass instead of bouncing between six tabs.
+    </p>
   </section>
 
   <section class="about-section">
-    <h2 class="about-h2">Track record</h2>
-    <p class="about-muted">
-      High-level only. Per-role detail lives on
-      <a href="https://www.linkedin.com/in/yossibenhagai/" target="_blank" rel="noopener">LinkedIn</a>.
-    </p>
-    <ul class="career-list">
-      {careerHighlights.map((c) => (
-        <li>
-          <span class="career-k mono">{c.label}</span>
-          <span class="career-v">{c.text}</span>
-        </li>
-      ))}
-    </ul>
-
-    <div class="cred-grid">
-      {credentials.map((c) => (
-        <div class="cred">
-          <span class="cred-label mono">{c.label}</span>
-          <span class="cred-note">{c.note}</span>
-        </div>
-      ))}
-    </div>
-  </section>
-
-  <section class="about-section">
-    <h2 class="about-h2">Patents</h2>
-    <p class="about-muted">
-      Three on unidirectional / cross-domain networking - the kind of networking where
-      <em>"just retry"</em> is not an option.
-    </p>
-    <ul class="patent-list">
-      {patents.map((p) => (
-        <li class="patent">
-          <span class="patent-title">{p.title}</span>
-          <span class="patent-meta mono">{p.id}</span>
+    <h2 class="about-h2">What it checks</h2>
+    <ul class="module-list">
+      {modules.map((m) => (
+        <li class="module">
+          <span class="module-k mono">{m.name}</span>
+          <span class="module-v">{m.text}</span>
         </li>
       ))}
     </ul>
   </section>
 
   <section class="about-section">
-    <h2 class="about-h2">Now</h2>
+    <h2 class="about-h2">How it works</h2>
+    <p class="about-muted">
+      Astro-built static frontend on Cloudflare Pages. Every check runs in Cloudflare
+      Pages Functions at the edge. No servers, no queues, no database. Requests are
+      stateless - nothing about your input is stored.
+    </p>
+    <p class="about-muted">
+      Rate-limited in-code via the Cache API at the Worker layer - no external
+      dependency. Input validation and SSRF guards live in a shared tool registry so
+      the HTTP API, the web UI, and the MCP server all enforce the same rules.
+    </p>
+    <p class="about-muted">
+      Agents can call netrecon as an MCP server - see
+      <a href="/mcp">the MCP page</a> for Claude Desktop, Cursor, and VS Code configs.
+      Programmatic clients can hit <code class="mono">/api/analyze</code>,
+      <code class="mono">/api/compare</code>, <code class="mono">/api/whoami</code>,
+      and <code class="mono">/api/health</code> directly.
+    </p>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Trust posture</h2>
+    <ul class="trust-list">
+      <li><strong>No accounts, no email gating.</strong> The site is public and anonymous.</li>
+      <li><strong>No input logging.</strong> What you analyze is not persisted. The edge runtime is stateless by design.</li>
+      <li><strong>No ads, no trackers.</strong> Zero third-party JS.</li>
+      <li><strong>Rate-limited.</strong> 10/min for <code class="mono">/api/analyze</code> and <code class="mono">/api/compare</code>, 20/min for <code class="mono">/api/mcp</code>, 60/min for <code class="mono">/api/whoami</code>. Per-IP.</li>
+      <li><strong>SSRF-guarded.</strong> Inputs that resolve to private / loopback / link-local ranges are rejected at the tool boundary.</li>
+    </ul>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Known limitations</h2>
+    <p class="about-muted">
+      We try to be honest about what the edge can and can't do from inside a Worker.
+    </p>
+    <ul class="trust-list">
+      <li>
+        <strong>TLS chain from CT logs is not a live handshake.</strong> For most targets
+        we fall back to Certificate Transparency logs (Certspotter / crt.sh). The chain
+        you see is what <em>was issued</em>, not what the peer <em>is currently serving</em>.
+      </li>
+      <li>
+        <strong>Browser Rendering path loses issuer.</strong> When netrecon uses
+        Cloudflare Browser Rendering to capture a real TLS 1.3 handshake, Chrome's
+        security state doesn't expose the certificate issuer. This is a browser
+        limitation, not ours. See <a href="/blog/" >the blog</a> for the full write-up.
+      </li>
+      <li>
+        <strong>No IPv6-only clients.</strong> Outbound fetches use whatever the Worker
+        runtime picks - typically v4 where available.
+      </li>
+      <li>
+        <strong>Not an uptime monitor.</strong> We give you a point-in-time snapshot.
+        We don't poll, alert, or track history.
+      </li>
+    </ul>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Acknowledgments</h2>
+    <p class="about-muted">
+      netrecon is a frontend for a lot of other people's excellent work.
+    </p>
+    <ul class="ack-list">
+      {acknowledgments.map((a) => (
+        <li class="ack">
+          <span class="ack-who mono">{a.who}</span>
+          <span class="ack-for">{a.for}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="about-section">
+    <h2 class="about-h2">Credits</h2>
     <p>
-      Senior SRE at Microsoft Sentinel, working on data &amp; research enablement. On my spare time,
-      writing and building small things that keep me fluent in modern runtimes, LLM-tooled
-      operations, and edge architectures - such as <a href="/">netrecon</a>, a
-      correlated-diagnostics tool with an MCP interface.
+      Built by Yossi Ben Hagai -
+      <a href="https://yossibh.github.io/" target="_blank" rel="noopener">yossibh.github.io</a>.
     </p>
-  </section>
-
-  <section class="about-section">
-    <h2 class="about-h2">Contact</h2>
-    <ul class="contact-list mono">
-      <li><span class="c-k">linkedin</span> <a href="https://www.linkedin.com/in/yossibenhagai/" target="_blank" rel="noopener">linkedin.com/in/yossibenhagai</a></li>
-      <li><span class="c-k">github</span> <a href="https://github.com/Yossibh" target="_blank" rel="noopener">github.com/Yossibh</a></li>
-      <li><span class="c-k">x / twitter</span> <a href="https://twitter.com/YossiBenHagai" target="_blank" rel="noopener">@YossiBenHagai</a></li>
-      <li><span class="c-k">linktree</span> <a href="https://linktr.ee/yossibh" target="_blank" rel="noopener">linktr.ee/yossibh</a></li>
-    </ul>
   </section>
 </Layout>
 
@@ -156,7 +161,7 @@ const patents = [
   .about-hero .prompt .typed { color: var(--fg); }
   .about-h1 { font-size: 38px; line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.015em; }
   .about-lede { font-size: 17px; color: var(--fg-dim); max-width: 760px; margin: 0 0 18px; }
-  .about-lede strong { color: var(--fg); font-weight: 600; }
+  .about-lede em { color: var(--fg); font-style: italic; }
   .about-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
   .about-pills .pill {
     font-size: 11px; color: var(--fg-dim); border: 1px solid var(--border);
@@ -173,97 +178,25 @@ const patents = [
   .about-muted { color: var(--fg-dim); max-width: 760px; margin-top: 0; }
   .about-muted em { color: var(--fg); font-style: italic; }
 
-  /* ── Quadrant visualization ──────────────────────────────────────────── */
-  .quadrant {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 14px;
-    margin-top: 20px;
-    padding: 36px 34px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background:
-      radial-gradient(ellipse at center, rgba(92,210,163,0.08), transparent 60%),
-      var(--bg-elev);
-  }
-  .q-card {
-    display: flex; flex-direction: column; gap: 8px;
-    padding: 16px 18px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    min-height: 130px;
-    transition: border-color .12s ease, transform .12s ease;
-  }
-  .q-card:hover { border-color: var(--accent-dim); transform: translateY(-1px); }
-  .q-tag { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
-  .q-card strong { font-size: 15px; color: var(--fg); font-weight: 600; line-height: 1.35; }
-  .q-meta { font-size: 11px; color: var(--fg-dim); margin-top: auto; }
+  .module-list { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+  .module { display: grid; grid-template-columns: 140px 1fr; gap: 14px; align-items: baseline; padding: 4px 0; border-left: 2px solid var(--accent-dim); padding-left: 12px; }
+  .module-k { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+  .module-v { color: var(--fg); }
 
-  .q-edge {
-    position: absolute;
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em;
-    color: var(--accent); opacity: 0.78;
-    background: var(--bg-elev);
-    padding: 3px 8px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-  .q-edge-top    { top: 18px; left: 50%; transform: translateX(-50%); }
-  .q-edge-bottom { bottom: 18px; left: 50%; transform: translateX(-50%); }
-  .q-edge-left   { top: 50%; left: 6px;  writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
-  .q-edge-right  { top: 50%; right: 6px; writing-mode: vertical-rl; transform: translateY(-50%); }
+  .trust-list { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; max-width: 780px; }
+  .trust-list li { padding-left: 16px; position: relative; color: var(--fg-dim); }
+  .trust-list li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
+  .trust-list strong { color: var(--fg); font-weight: 600; }
+  .trust-list code { background: var(--bg-elev); padding: 1px 6px; border-radius: 3px; font-size: 12px; border: 1px solid var(--border); }
 
-  .q-center {
-    position: absolute;
-    top: 50%; left: 50%; transform: translate(-50%, -50%);
-    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--bg);
-    background: var(--accent);
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-weight: 700;
-    box-shadow: 0 0 0 4px var(--bg-elev), 0 0 0 5px var(--accent-dim);
-    pointer-events: none;
-  }
-
-  @media (max-width: 720px) {
-    .quadrant { grid-template-columns: 1fr; grid-template-rows: auto; padding: 20px 14px; }
-    .q-edge-left, .q-edge-right { display: none; }
-    .q-edge-top, .q-edge-bottom { position: static; transform: none; display: inline-block; margin: 6px 4px; }
-    .q-center { position: static; transform: none; display: inline-block; margin: 10px 0; }
-  }
-
-  /* ── Track record ─────────────────────────────────────────────────────── */
-  .career-list { list-style: none; padding: 0; margin: 10px 0 20px; display: flex; flex-direction: column; gap: 6px; }
-  .career-list li { display: grid; grid-template-columns: 110px 1fr; gap: 14px; align-items: baseline; padding: 4px 0; }
-  .career-k { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
-  .career-v { color: var(--fg); }
-
-  .cred-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
-  .cred { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--accent-dim); padding: 4px 0 4px 12px; }
-  .cred-label { font-size: 13px; color: var(--fg); font-weight: 600; }
-  .cred-note { font-size: 12px; color: var(--fg-dim); }
-
-  /* ── Patents ──────────────────────────────────────────────────────────── */
-  .patent-list { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
-  .patent { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; border-left: 2px solid var(--accent-dim); padding: 4px 0 4px 12px; }
-  .patent-title { font-weight: 500; color: var(--fg); }
-  .patent-meta { font-size: 12px; color: var(--fg-dim); }
-
-  /* ── Contact ──────────────────────────────────────────────────────────── */
-  .contact-list { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-  .contact-list li { padding: 4px 0; }
-  .contact-list .c-k { display: inline-block; min-width: 100px; color: var(--fg-dim); }
-  .contact-list .c-k::after { content: ":"; }
+  .ack-list { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+  .ack { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: baseline; padding: 4px 0; }
+  .ack-who { color: var(--fg); font-size: 13px; }
+  .ack-for { color: var(--fg-dim); font-size: 13px; }
 
   @media (max-width: 640px) {
     .about-h1 { font-size: 28px; }
     .about-lede { font-size: 15px; }
-    .career-list li { grid-template-columns: 1fr; gap: 2px; }
+    .module, .ack { grid-template-columns: 1fr; gap: 2px; }
   }
 </style>
