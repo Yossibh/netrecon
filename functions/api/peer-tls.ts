@@ -8,6 +8,10 @@
 
 import { inspectPeerTls } from '../../src/lib/tls-peer';
 
+interface PeerTlsEnv {
+  BROWSER?: unknown;
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
@@ -19,7 +23,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-export const onRequestGet: PagesFunction = async ({ request }) => {
+export const onRequestGet: PagesFunction<PeerTlsEnv> = async ({ request, env }) => {
   const url = new URL(request.url);
   const host = (url.searchParams.get('host') || '').trim();
   const portRaw = url.searchParams.get('port');
@@ -31,9 +35,9 @@ export const onRequestGet: PagesFunction = async ({ request }) => {
     port = p;
   }
   try {
-    const result = await inspectPeerTls(host, port);
-    return json(result, result.ok ? 200 : 200); // always 200, status is in body.ok
-  } catch (err: any) {
-    return json({ error: err?.message ?? String(err) }, 500);
+    const result = await inspectPeerTls(host, port, env?.BROWSER);
+    return json(result);
+  } catch (err) {
+    return json({ error: (err as Error)?.message ?? String(err) }, 500);
   }
 };

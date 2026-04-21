@@ -1,25 +1,19 @@
-// Live peer TLS inspection.
+// Live peer TLS inspection — hybrid: raw-TCP fast path + browser fallback.
 //
-// What this does:
-//   1. Open a raw TCP socket to host:port (default 443) via Cloudflare's
-//      `connect()` API.
-//   2. Write a hand-crafted TLS 1.2 ClientHello with SNI.
-//   3. Read the server's handshake flight.
-//   4. Parse ServerHello (negotiated version + cipher) and Certificate (DER chain).
-//   5. Close the socket (we never complete the handshake - no crypto needed).
-//   6. Extract human-friendly fields from each cert via pkijs.
+// Fast path (this file): open a raw TCP socket via Cloudflare's `connect()`
+// API, hand-craft a TLS 1.2 ClientHello with SNI, read the plaintext server
+// flight (ServerHello + Certificate), extract cert fields with pkijs. Fast
+// (<500ms), free, but has two blind spots:
+//   1. Cloudflare blocks outbound from Workers to its own IP ranges, so any
+//      CF-fronted target returns "Stream was cancelled." (~20% of the web.)
+//   2. TLS 1.3-only servers send an encrypted Certificate message we can't
+//      read without a full handshake implementation.
 //
-// Why bother: our CT-logs-based TLS module only knows what certs *were issued*
-// for a hostname. This module knows what cert is *actually being served right
-// now*, which is what every operator really wants when debugging TLS issues.
-//
-// Limitations called out in the response:
-//   - TLS 1.3-only servers reject our TLS 1.2 hello with `protocol_version`.
-//     We report that clearly; we can't inspect 1.3-only peers without full
-//     handshake crypto.
-//   - Clients sending servers that require client-cert auth before sending
-//     Certificate won't work (very rare in the public web).
-//   - No ALPN, no OCSP stapling parsing yet (future work).
+// Fallback path (browser.ts): a headless Chromium via the Browser Rendering
+// binding, which sidesteps both blind spots (it's a real browser, not a
+// Worker, so CF routes its traffic normally; and Chrome speaks full TLS 1.3).
+// Slower (~3-5s) and capped at 10 browser-minutes/day on the Free plan, so
+// we only use it when the fast path fails in one of the two known ways.
 
 import { connect } from 'cloudflare:sockets';
 import { validateHost } from '../security';
@@ -33,25 +27,28 @@ import {
   tlsVersionName,
 } from './records';
 import { extractCertFields, matchesHostname, type ExtractedCert } from './cert';
+import { inspectPeerTlsBrowser } from './browser';
 
 export interface PeerTlsResult {
   ok: boolean;
   host: string;
   port: number;
-  negotiatedVersion?: string;      // e.g. "TLS 1.2"
-  cipherSuite?: string;            // e.g. "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
-  certs?: ExtractedCert[];         // leaf first, then chain
-  hostnameMatch?: boolean;         // leaf cert matches requested SNI?
-  error?: string;                  // plain-english failure reason
+  source: 'raw-tcp' | 'browser-rendering';
+  negotiatedVersion?: string;
+  cipherSuite?: string;
+  certs?: ExtractedCert[];
+  hostnameMatch?: boolean;
+  error?: string;
   alert?: { level: number; description: string };
   durationMs: number;
   bytesRead?: number;
-  notes: string[];                 // caveats we want operators to see
+  notes: string[];
+  fellBackTo?: 'browser-rendering';
+  fastPathError?: string;
 }
 
 const HANDSHAKE_TIMEOUT_MS = 5000;
 
-/** Race a promise against a timer; losing side is never awaited. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
@@ -59,22 +56,23 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsResult> {
+/** Should we ask the browser to retry this target after the fast path? */
+function shouldFallbackToBrowser(r: PeerTlsResult): boolean {
+  if (r.ok) return false;
+  if (r.alert?.description === 'protocol_version') return true;          // TLS 1.3-only
+  if (r.error?.includes('Stream was cancelled')) return true;            // CF-blocked
+  if (r.error?.includes('Peer negotiated TLS 1.3')) return true;
+  return false;
+}
+
+async function fastPath(host: string, port: number): Promise<PeerTlsResult> {
   const started = Date.now();
   const notes: string[] = [];
-  const result: PeerTlsResult = { ok: false, host, port, durationMs: 0, notes };
+  const result: PeerTlsResult = { ok: false, host, port, source: 'raw-tcp', durationMs: 0, notes };
 
-  // Gate 1: SSRF / hostname sanity (same rules as the rest of the app).
   const v = validateHost(host);
-  if (!v.ok) {
-    result.error = v.reason;
-    result.durationMs = Date.now() - started;
-    return result;
-  }
+  if (!v.ok) { result.error = v.reason; result.durationMs = Date.now() - started; return result; }
 
-  // SNI requires an ASCII hostname, not an IP. (Workers' connect() will still
-  // work for IPs, but real-world servers cert-mux by SNI, and an IP in the
-  // SNI extension is a protocol violation.)
   const looksLikeIp = /^(\d{1,3}(\.\d{1,3}){3}|\[?[0-9a-fA-F:]+\]?)$/.test(host);
   if (looksLikeIp) {
     result.error = 'Live peer TLS requires a hostname (SNI). IP-only inputs cannot set SNI.';
@@ -82,34 +80,36 @@ export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsR
     return result;
   }
 
-  // Gate 2: connect + handshake capture. We set secureTransport:"off" so the
-  // runtime does NOT attempt its own TLS handshake - we're doing it ourselves.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let socket: any;
   try {
     socket = connect({ hostname: host, port }, { secureTransport: 'off', allowHalfOpen: false });
-  } catch (err: any) {
-    result.error = `Connect failed: ${err?.message ?? String(err)}`;
+  } catch (err) {
+    result.error = `Connect failed: ${(err as Error)?.message ?? String(err)}`;
     result.durationMs = Date.now() - started;
     return result;
   }
 
   const writer = socket.writable.getWriter();
   const reader = socket.readable.getReader();
-
   let writerReleased = false;
   let readerReleased = false;
   const releaseAndClose = async () => {
-    try { if (!writerReleased) { writer.releaseLock(); writerReleased = true; } } catch {}
-    try { if (!readerReleased) { await reader.cancel().catch(() => {}); reader.releaseLock(); readerReleased = true; } } catch {}
-    try { await socket.close().catch(() => {}); } catch {}
+    try { if (!writerReleased) { writer.releaseLock(); writerReleased = true; } } catch { /* noop */ }
+    try {
+      if (!readerReleased) {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+        readerReleased = true;
+      }
+    } catch { /* noop */ }
+    try { await socket.close().catch(() => {}); } catch { /* noop */ }
   };
 
   try {
     const hello = buildClientHello(host);
     await withTimeout(writer.write(hello), HANDSHAKE_TIMEOUT_MS, 'write ClientHello');
-    // Done writing - release the writer eagerly so the TCP half-close doesn't
-    // confuse the peer if it waits for EOF.
-    try { writer.releaseLock(); writerReleased = true; } catch {}
+    try { writer.releaseLock(); writerReleased = true; } catch { /* noop */ }
 
     const flight = await withTimeout(readServerFlight(reader), HANDSHAKE_TIMEOUT_MS, 'read handshake');
     result.bytesRead = flight.bytesRead;
@@ -118,8 +118,8 @@ export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsR
       const name = alertName(flight.alert.description);
       result.alert = { level: flight.alert.level, description: name };
       if (name === 'protocol_version') {
-        result.error = 'Peer rejected TLS 1.2 with protocol_version alert. This is typically a TLS 1.3-only server; our prototype cannot inspect 1.3-encrypted certs.';
-        notes.push('TLS 1.3-only servers encrypt the Certificate under handshake traffic secrets; live inspection of those would require a full TLS 1.3 implementation.');
+        result.error = 'Peer rejected TLS 1.2 with protocol_version alert. Likely TLS 1.3-only.';
+        notes.push('Fast path cannot inspect TLS 1.3-encrypted Certificates; browser fallback will take over.');
       } else if (name === 'handshake_failure' || name === 'insufficient_security') {
         result.error = `Peer rejected our ClientHello with ${name}. Likely no shared cipher suite or sig algorithm.`;
       } else if (name === 'unrecognized_name') {
@@ -143,10 +143,8 @@ export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsR
     result.cipherSuite = cipherSuiteName(sh.cipherSuite);
 
     if (sh.negotiatedVersion === 0x0304) {
-      // Server accepted our hello but negotiated 1.3 via supported_versions.
-      // Certificate message here is encrypted and we can't decode it.
-      result.error = 'Peer negotiated TLS 1.3 despite our 1.2-only hello; Certificate is encrypted. Prototype cannot inspect.';
-      notes.push('This is unusual: normally omitting `supported_versions` pins to 1.2. Some edge stacks still pick 1.3.');
+      result.error = 'Peer negotiated TLS 1.3 despite our 1.2-only hello; Certificate is encrypted.';
+      notes.push('Fast path cannot decrypt 1.3 Certificate; browser fallback will take over.');
       return result;
     }
 
@@ -158,24 +156,18 @@ export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsR
     }
 
     const derChain = parseCertificateMessage(flight.certificate.body);
-    if (!derChain || derChain.length === 0) {
-      result.error = 'Empty or malformed Certificate message.';
-      return result;
-    }
+    if (!derChain || derChain.length === 0) { result.error = 'Empty or malformed Certificate message.'; return result; }
 
     const extracted: ExtractedCert[] = [];
     for (let i = 0; i < derChain.length; i++) {
       try {
         // eslint-disable-next-line no-await-in-loop
         extracted.push(await extractCertFields(derChain[i]!));
-      } catch (err: any) {
-        notes.push(`Cert #${i} parse error: ${err?.message ?? String(err)}`);
+      } catch (err) {
+        notes.push(`Cert #${i} parse error: ${(err as Error)?.message ?? String(err)}`);
       }
     }
-    if (extracted.length === 0) {
-      result.error = 'All peer certs failed to parse.';
-      return result;
-    }
+    if (extracted.length === 0) { result.error = 'All peer certs failed to parse.'; return result; }
     result.certs = extracted;
     result.hostnameMatch = matchesHostname(extracted[0]!, host);
     result.ok = true;
@@ -187,11 +179,51 @@ export async function inspectPeerTls(host: string, port = 443): Promise<PeerTlsR
     if (!result.hostnameMatch) notes.push('Leaf certificate SANs do not match the requested hostname.');
 
     return result;
-  } catch (err: any) {
-    result.error = err?.message ?? String(err);
+  } catch (err) {
+    result.error = (err as Error)?.message ?? String(err);
     return result;
   } finally {
     await releaseAndClose();
     result.durationMs = Date.now() - started;
   }
 }
+
+/**
+ * Inspect the TLS cert actually served by host:port.
+ *
+ * @param host   ASCII hostname; IP inputs are rejected (SNI required).
+ * @param port   defaults to 443.
+ * @param browserBinding  optional `env.BROWSER` Browser Rendering binding;
+ *                        when provided, enables the browser fallback for
+ *                        CF-fronted and TLS 1.3-only targets.
+ */
+export async function inspectPeerTls(
+  host: string,
+  port = 443,
+  browserBinding?: unknown,
+): Promise<PeerTlsResult> {
+  const fast = await fastPath(host, port);
+  if (fast.ok || !browserBinding || !shouldFallbackToBrowser(fast)) return fast;
+
+  const fallback = await inspectPeerTlsBrowser(browserBinding, host, port);
+  const merged: PeerTlsResult = {
+    ok: fallback.ok,
+    host: fallback.host,
+    port: fallback.port,
+    source: 'browser-rendering',
+    negotiatedVersion: fallback.negotiatedVersion,
+    cipherSuite: fallback.cipherSuite,
+    certs: fallback.certs,
+    hostnameMatch: fallback.hostnameMatch,
+    error: fallback.error,
+    durationMs: fast.durationMs + fallback.durationMs,
+    notes: [
+      `Fast path (raw TCP) could not inspect this target (${fast.error}). Fell back to Browser Rendering.`,
+      ...fallback.notes,
+    ],
+    fellBackTo: 'browser-rendering',
+    fastPathError: fast.error,
+  };
+  return merged;
+}
+

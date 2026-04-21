@@ -1,16 +1,48 @@
 # Phase 4 — Live peer TLS inspection (prototype)
 
 ## Status
-**Prototype shipped** at `/api/peer-tls`. Not yet wired into the main analyze report.
+**Hybrid prototype shipped** at `/api/peer-tls`. Not yet wired into the main
+analyze report.
 
 ## What it does
-Opens a raw TCP connection to `host:443`, performs enough of a TLS 1.2 handshake
-to capture the peer's `Certificate` message, parses the DER chain with
-[`pkijs`](https://github.com/PeculiarVentures/PKI.js), and returns extracted
-cert fields plus negotiated version and cipher suite.
+Two code paths, chosen automatically:
 
-It **never completes the handshake** — no crypto, no Finished, no app data.
-Just enough to read what the server sent.
+1. **Fast path — raw TCP via Workers `connect()`**
+   Opens a raw TCP connection to `host:443`, performs enough of a TLS 1.2
+   handshake to capture the peer's `Certificate` message, parses the DER chain
+   with [`pkijs`](https://github.com/PeculiarVentures/PKI.js), and returns
+   extracted cert fields plus negotiated version and cipher suite. It **never
+   completes the handshake** — no crypto, no Finished, no app data. Just enough
+   to read what the server sent. ~200-600ms per target.
+
+2. **Fallback — Cloudflare Browser Rendering**
+   For targets the fast path cannot reach (Cloudflare-fronted hosts, TLS 1.3-
+   only servers that encrypt the Certificate record), we launch a headless
+   Chromium via the `BROWSER` binding, navigate to `https://host/`, and ask
+   Chrome for the peer cert via the CDP `Network.getCertificate` command plus
+   `response.securityDetails()`. ~3-5s per target. Free plan: 10 browser-
+   minutes/day, 3 concurrent.
+
+### Fallback trigger matrix
+| Fast-path outcome | Action |
+|---|---|
+| Success | return fast-path result (`source: "raw-tcp"`) |
+| `alert.description === "protocol_version"` (TLS 1.3-only) | fall back to browser |
+| Error contains `"Stream was cancelled"` (CF-internal block) | fall back to browser |
+| Error contains `"Peer negotiated TLS 1.3"` | fall back to browser |
+| Any other error | return the fast-path error, no fallback |
+
+### Known browser-path limitations
+- `Network.getCertificate` sometimes returns an empty DER chain for cached or
+  CF-proxied origins. When that happens we degrade to the high-level fields
+  Chrome exposes via `securityDetails()`:
+  - `subject`, `sans`, `notBefore`, `notAfter`, `negotiatedVersion`,
+    `hostnameMatch`, `expired` — all populated.
+  - `fingerprintSha256`, `serialNumber`, `signatureAlgorithm`,
+    `publicKeyAlgorithm`, and sometimes `issuer` — left empty. The probe
+    explicitly notes this in the response `notes` field.
+- Browser path is gated by CF Browser Rendering quotas; a 429-style error from
+  the binding is surfaced as a clean error message, not a crash.
 
 ## Why bother
 Our existing TLS module uses Certificate Transparency logs. CT tells us what

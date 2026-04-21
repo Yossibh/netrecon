@@ -1,3 +1,11 @@
 name = "netrecon"
 compatibility_date = "2024-10-22"
 pages_build_output_dir = "./dist"
+compatibility_flags = ["nodejs_compat"]
+
+# Browser Rendering binding for fallback peer-TLS inspection.
+# When connect() can't reach a target (CF-owned IPs) or we need TLS 1.3, we
+# spin up a headless Chromium via this binding and capture the cert chain
+# through Chrome DevTools Protocol. Free plan: 10 browser-minutes/day.
+[browser]
+binding = "BROWSER"
