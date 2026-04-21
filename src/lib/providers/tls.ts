@@ -48,7 +48,9 @@ async function fetchWithTimeout(url: string, ms: number, init?: RequestInit): Pr
 }
 
 async function queryCertspotter(domain: string): Promise<TlsModuleResult | null> {
-  const url = `https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(domain)}&expand=dns_names&expand=issuer`;
+  // include_subdomains + match_wildcards ensures we find certs issued at the
+  // apex or via wildcards when the user enters a subdomain like www.example.com.
+  const url = `https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(domain)}&include_subdomains=true&match_wildcards=true&expand=dns_names&expand=issuer`;
   try {
     const res = await fetchWithTimeout(url, 10_000, { headers: { accept: 'application/json' } });
     if (res.status === 429) return { ok: true, source: 'unavailable', skipped: true, skipReason: 'Certspotter rate limit hit. Try again later or set SSLMATE_API_KEY.' };
@@ -114,8 +116,25 @@ export interface InspectTlsOpts {
 }
 
 export async function inspectTls(domain: string, opts: InspectTlsOpts = {}): Promise<TlsModuleResult> {
-  const [certspotter, crtsh] = await Promise.all([queryCertspotter(domain), queryCrtSh(domain)]);
-  const result = certspotter ?? crtsh ?? {
+  // Normalize: strip leading www. We always query the broader scope because
+  // Certspotter/crt.sh index by issued SAN, and many sites only have certs
+  // issued at the apex or via wildcards rather than per-subdomain.
+  const stripped = domain.replace(/^www\./i, '');
+  const targets = stripped === domain ? [domain] : [domain, stripped];
+
+  let result: TlsModuleResult | null = null;
+  for (const t of targets) {
+    const [certspotter, crtsh] = await Promise.all([queryCertspotter(t), queryCrtSh(t)]);
+    const candidate = certspotter ?? crtsh;
+    if (candidate && candidate.source !== 'unavailable' && (candidate.recentCount ?? 0) > 0) {
+      result = candidate;
+      break;
+    }
+    // keep last non-null as a fallback so we still report "0 certificates" rather than null
+    if (!result && candidate) result = candidate;
+  }
+
+  result = result ?? {
     ok: true as const,
     source: 'unavailable' as const,
     skipped: true as const,
