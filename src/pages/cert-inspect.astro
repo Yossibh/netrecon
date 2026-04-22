@@ -1,0 +1,125 @@
+---
+import Layout from '../components/Layout.astro';
+---
+<Layout title="netrecon - cert inspector" description="Paste a PEM chain or enter a hostname. Get per-certificate SANs, key info, signature algorithm, expiry timeline, and findings.">
+  <section class="decode-hero">
+    <div class="prompt mono">$ netrecon cert-inspect</div>
+    <h1>X.509 certificate inspector.</h1>
+    <p class="tagline">SANs · sigAlg · expiry · weak primitives · hostname coverage · chain parse</p>
+    <p class="privacy-note">
+      <span class="lock">&#128274;</span>
+      Pasted PEM is sent to <code>/api/cert-inspect</code> to use our ASN.1 parser, then discarded. Nothing is persisted.
+    </p>
+  </section>
+
+  <section class="mcp-inspect-form">
+    <div class="row">
+      <label class="field grow">
+        <span>Hostname (we'll look it up in CT logs)</span>
+        <input id="cert-host" type="text" placeholder="example.com" autocomplete="off" spellcheck="false" />
+      </label>
+      <button id="cert-host-btn" type="button" class="primary">Inspect host</button>
+    </div>
+    <div class="row">
+      <label class="field grow">
+        <span>Or paste one or more PEM-encoded certificates</span>
+        <textarea id="cert-pem" rows="6" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----"></textarea>
+      </label>
+      <button id="cert-pem-btn" type="button">Inspect PEM</button>
+    </div>
+  </section>
+
+  <section id="cert-output" class="decode-output"></section>
+
+  <script>
+    const hostEl = document.getElementById('cert-host') as HTMLInputElement;
+    const pemEl = document.getElementById('cert-pem') as HTMLTextAreaElement;
+    const hostBtn = document.getElementById('cert-host-btn') as HTMLButtonElement;
+    const pemBtn = document.getElementById('cert-pem-btn') as HTMLButtonElement;
+    const out = document.getElementById('cert-output') as HTMLElement;
+
+    function h(tag: string, attrs: Record<string, string> = {}, ...kids: (Node | string | null)[]): HTMLElement {
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) { if (k === 'class') el.className = v; else el.setAttribute(k, v); }
+      for (const k of kids) { if (k != null) el.appendChild(typeof k === 'string' ? document.createTextNode(k) : k); }
+      return el;
+    }
+    function badge(sev: string) { return h('span', { class: `badge ${sev}` }, sev); }
+    function kv(rows: Array<[string, string]>) {
+      const tbl = h('table', { class: 'kv-table' });
+      for (const [k, v] of rows) tbl.appendChild(h('tr', {}, h('th', {}, k), h('td', { class: 'mono' }, v)));
+      return tbl;
+    }
+
+    async function call(body: any) {
+      out.innerHTML = '';
+      out.appendChild(h('div', { class: 'loading' }, 'Inspecting...'));
+      try {
+        const res = await fetch('/api/cert-inspect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+        render(data);
+      } catch (err: any) {
+        out.innerHTML = '';
+        out.appendChild(h('div', { class: 'finding severity-high' }, h('strong', {}, 'Error'), h('p', {}, err.message)));
+      }
+    }
+
+    function render(data: any) {
+      out.innerHTML = '';
+      out.appendChild(h('div', { class: 'panel' },
+        h('h2', {}, data.summary.title),
+        h('div', {}, badge(data.summary.riskLevel), ` risk · ${data.findings.length} findings · source: ${data.source}`),
+      ));
+
+      const fp = h('div', { class: 'panel' });
+      if (!data.findings.length) fp.appendChild(h('div', { class: 'loading' }, 'No issues detected.'));
+      for (const f of data.findings) {
+        fp.appendChild(h('div', { class: 'finding' },
+          h('div', { class: 'title' }, badge(f.severity), f.title),
+          h('div', { class: 'explanation' }, f.explanation),
+          f.evidence?.length ? h('div', {}, h('strong', {}, 'Evidence'), h('ul', {}, ...f.evidence.map((x: string) => h('li', {}, h('code', {}, x))))) : null,
+          f.nextSteps?.length ? h('div', {}, h('strong', {}, 'Next steps'), h('ul', {}, ...f.nextSteps.map((x: string) => h('li', {}, x)))) : null,
+        ));
+      }
+      out.appendChild(fp);
+
+      data.certs.forEach((c: any, i: number) => {
+        const role = i === 0 ? 'leaf' : i === data.certs.length - 1 ? 'root' : `intermediate[${i}]`;
+        const p = h('div', { class: 'panel' }, h('h3', {}, `${role}: ${c.subject}`));
+        p.appendChild(kv([
+          ['Subject', c.subject],
+          ['Issuer', c.issuer],
+          ['Not before', c.notBefore],
+          ['Not after', c.notAfter],
+          ['Days until expiry', String(c.daysUntilExpiry)],
+          ['Signature algorithm', c.signatureAlgorithm],
+          ['Public key algorithm', c.publicKeyAlgorithm],
+          ['Serial number', c.serialNumber],
+          ['SHA-256 fingerprint', c.fingerprintSha256],
+          ['Self-signed?', c.selfSigned ? 'yes' : 'no'],
+          ['Expired?', c.expired ? 'yes' : 'no'],
+        ]));
+        if (c.sans?.length) {
+          p.appendChild(h('h4', {}, `SANs (${c.sans.length})`));
+          p.appendChild(h('ul', { class: 'mono' }, ...c.sans.map((s: string) => h('li', {}, s))));
+        }
+        out.appendChild(p);
+      });
+    }
+
+    hostBtn.addEventListener('click', () => {
+      const v = hostEl.value.trim();
+      if (!v) return;
+      call({ host: v });
+    });
+    pemBtn.addEventListener('click', () => {
+      const v = pemEl.value.trim();
+      if (!v) return;
+      call({ pem: v });
+    });
+
+    const q = new URL(window.location.href).searchParams.get('host');
+    if (q) { hostEl.value = q; hostBtn.click(); }
+  </script>
+</Layout>

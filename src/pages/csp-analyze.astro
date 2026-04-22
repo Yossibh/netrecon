@@ -1,0 +1,120 @@
+---
+import Layout from '../components/Layout.astro';
+---
+<Layout title="netrecon - CSP analyzer" description="Paste a Content-Security-Policy or enter a URL. Get per-directive findings with severity, explanations, and tightening suggestions.">
+  <section class="decode-hero">
+    <div class="prompt mono">$ netrecon csp-analyze</div>
+    <h1>CSP analyzer.</h1>
+    <p class="tagline">per-directive findings · XSS posture · clickjacking · nonce/strict-dynamic guidance</p>
+    <p class="privacy-note">
+      <span class="lock">&#128274;</span>
+      Pasted policies are analyzed in your browser. Only the "fetch URL" mode makes an outbound request from the Cloudflare edge.
+    </p>
+  </section>
+
+  <section class="mcp-inspect-form">
+    <div class="row">
+      <label class="field grow">
+        <span>URL (we'll fetch and read the CSP header / meta)</span>
+        <input id="csp-url" type="url" placeholder="https://example.com" autocomplete="off" spellcheck="false" />
+      </label>
+      <button id="csp-fetch-btn" type="button" class="primary">Fetch &amp; analyze</button>
+    </div>
+    <div class="row">
+      <label class="field grow">
+        <span>Or paste a CSP policy directly</span>
+        <textarea id="csp-policy" rows="3" spellcheck="false" placeholder="default-src 'self'; script-src 'self' 'unsafe-inline'; ..."></textarea>
+      </label>
+      <button id="csp-paste-btn" type="button">Analyze pasted</button>
+    </div>
+  </section>
+
+  <section id="csp-output" class="decode-output"></section>
+
+  <script>
+    import { analyzeCsp } from '../lib/csp-analyzer';
+
+    const urlEl = document.getElementById('csp-url') as HTMLInputElement;
+    const pasteEl = document.getElementById('csp-policy') as HTMLTextAreaElement;
+    const fetchBtn = document.getElementById('csp-fetch-btn') as HTMLButtonElement;
+    const pasteBtn = document.getElementById('csp-paste-btn') as HTMLButtonElement;
+    const out = document.getElementById('csp-output') as HTMLElement;
+
+    function h(tag: string, attrs: Record<string, string> = {}, ...kids: (Node | string | null)[]): HTMLElement {
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) { if (k === 'class') el.className = v; else el.setAttribute(k, v); }
+      for (const k of kids) { if (k != null) el.appendChild(typeof k === 'string' ? document.createTextNode(k) : k); }
+      return el;
+    }
+    function badge(sev: string) { return h('span', { class: `badge ${sev}` }, sev); }
+    function gradeBadge(grade: string) {
+      const cls = grade === 'A' || grade === 'B' ? 'low' : grade === 'C' ? 'medium' : 'high';
+      return h('span', { class: `badge ${cls}`, style: 'font-size:1.4em; padding:4px 12px' }, grade);
+    }
+
+    function render(a: any, sourceLabel: string, policy: string) {
+      out.innerHTML = '';
+      const s = a.summary;
+      out.appendChild(h('div', { class: 'panel' },
+        h('h2', {}, `CSP analysis (${sourceLabel})`),
+        h('div', { style: 'display:flex; gap:24px; align-items:center; flex-wrap:wrap' },
+          gradeBadge(s.grade),
+          h('div', {},
+            h('div', {}, badge(s.riskLevel), ` risk · ${a.findings.length} findings`),
+            h('div', { class: 'mono', style: 'opacity:.75; font-size:.9em; margin-top:4px' }, `Score ${s.score}/100 · ${s.title}`),
+          ),
+        ),
+        h('details', { style: 'margin-top:12px' },
+          h('summary', {}, 'Policy source'),
+          h('pre', { class: 'cmd' }, policy),
+        ),
+      ));
+      const panel = h('div', { class: 'panel' });
+      if (!a.findings.length) panel.appendChild(h('div', { class: 'loading' }, 'No issues detected.'));
+      for (const f of a.findings) {
+        panel.appendChild(h('div', { class: 'finding' },
+          h('div', { class: 'title' }, badge(f.severity), f.title),
+          h('div', { class: 'explanation' }, f.explanation),
+          f.evidence?.length ? h('div', {}, h('strong', {}, 'Evidence'), h('ul', {}, ...f.evidence.map((x: string) => h('li', {}, h('code', {}, x))))) : null,
+          f.nextSteps?.length ? h('div', {}, h('strong', {}, 'Next steps'), h('ul', {}, ...f.nextSteps.map((x: string) => h('li', {}, x)))) : null,
+        ));
+      }
+      out.appendChild(panel);
+
+      const dir = h('div', { class: 'panel' }, h('h3', {}, 'Parsed directives'));
+      const tbl = h('table', { class: 'kv-table' });
+      for (const d of a.directives) tbl.appendChild(h('tr', {}, h('th', {}, d.name), h('td', { class: 'mono' }, d.sources.join(' ') || '(none)')));
+      dir.appendChild(tbl);
+      out.appendChild(dir);
+    }
+
+    pasteBtn.addEventListener('click', () => {
+      const p = pasteEl.value.trim();
+      if (!p) return;
+      render(analyzeCsp(p), 'pasted', p);
+    });
+
+    fetchBtn.addEventListener('click', async () => {
+      const u = urlEl.value.trim();
+      if (!u) return;
+      out.innerHTML = '';
+      out.appendChild(h('div', { class: 'loading' }, 'Fetching and analyzing...'));
+      try {
+        const res = await fetch('/api/csp-analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: u }) });
+        const data = await res.json();
+        if (!res.ok || data.error && !data.policy) {
+          out.innerHTML = '';
+          out.appendChild(h('div', { class: 'finding severity-high' }, h('strong', {}, 'Fetch / analysis failed'), h('p', {}, data.error || `HTTP ${res.status}`)));
+          return;
+        }
+        render(data, `fetched · ${data.policySource || 'unknown'} · ${data.fetchedUrl}`, data.policy || '');
+      } catch (err: any) {
+        out.innerHTML = '';
+        out.appendChild(h('div', { class: 'finding severity-high' }, h('strong', {}, 'Error'), h('p', {}, err.message)));
+      }
+    });
+
+    const q = new URL(window.location.href).searchParams.get('url');
+    if (q) { urlEl.value = q; fetchBtn.click(); }
+  </script>
+</Layout>

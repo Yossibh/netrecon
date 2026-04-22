@@ -1,0 +1,53 @@
+---
+import Layout from '../components/Layout.astro';
+
+const tools = [
+  { href: '/decode', title: 'Decode', tagline: 'JWT / base64 / URL / hex / JSON / UUID / ULID / timestamp - 100% client-side' },
+  { href: '/subnet', title: 'Subnet calculator', tagline: 'IPv4 + IPv6 CIDR math, reverse zones, wildcard masks' },
+  { href: '/mcp-inspect', title: 'MCP inspector', tagline: 'Connect to any MCP server, enumerate tools, invoke with auto-generated forms' },
+  { href: '/mcp-scan', title: 'MCP security scanner', tagline: 'Transport + auth + prompt-injection + supply-chain fingerprints' },
+  { href: '/cert-inspect', title: 'X.509 cert inspector', tagline: 'Paste PEM or enter hostname - SANs, expiry, weak signatures' },
+  { href: '/csp-analyze', title: 'CSP analyzer', tagline: 'Per-directive CSP findings, nonce/strict-dynamic guidance' },
+  { href: '/mcp', title: 'MCP server', tagline: 'Use netrecon from Claude Desktop, Cursor, VS Code as an MCP tool provider' },
+];
+---
+<Layout title="netrecon - tools" description="All netrecon utilities: decoder, subnet calc, MCP inspector + scanner, cert inspector, CSP analyzer, and the hosted MCP server.">
+  <section class="decode-hero">
+    <div class="prompt mono">$ netrecon tools</div>
+    <h1>Tools.</h1>
+    <p class="tagline">The correlated-diagnostics platform, plus focused one-shot utilities.</p>
+  </section>
+
+  <section class="tools-grid">
+    {tools.map((t) => (
+      <a class="tool-card" href={t.href}>
+        <h3>{t.title}</h3>
+        <p>{t.tagline}</p>
+      </a>
+    ))}
+  </section>
+</Layout>
+
+<style>
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .tool-card {
+    display: block;
+    padding: 16px 18px;
+    border: 1px solid var(--border, #2a2a2a);
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 120ms, transform 120ms;
+  }
+  .tool-card:hover {
+    border-color: var(--accent, #5cf);
+    transform: translateY(-1px);
+  }
+  .tool-card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .tool-card p { margin: 0; font-size: 0.9rem; opacity: 0.78; }
+</style>

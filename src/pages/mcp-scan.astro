@@ -1,0 +1,172 @@
+---
+import Layout from '../components/Layout.astro';
+---
+<Layout title="netrecon - MCP security scanner" description="Scan a remote MCP server for transport, auth, prompt-injection, and supply-chain issues. Powered by the netrecon findings engine.">
+  <section class="decode-hero">
+    <div class="prompt mono">$ netrecon mcp-scan</div>
+    <h1>MCP security scanner.</h1>
+    <p class="tagline">HTTPS · auth enforcement · prompt-injection heuristics · supply-chain · DocsGPT-class downgrade · CVE fingerprints</p>
+    <p class="privacy-note">
+      <span class="lock">&#128274;</span>
+      The scanner runs from the Cloudflare edge (not your browser). The target URL + any Bearer token are sent to <code>/api/mcp-scan</code> and not persisted.
+    </p>
+  </section>
+
+  <section class="mcp-inspect-form">
+    <div class="row">
+      <label class="field grow">
+        <span>MCP server URL</span>
+        <input id="mcp-url" type="url" placeholder="https://your-mcp-server.example/mcp" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Bearer token (optional)</span>
+        <input id="mcp-token" type="password" placeholder="optional" autocomplete="off" />
+      </label>
+      <button id="mcp-scan-btn" type="button" class="primary">Scan</button>
+    </div>
+    <div class="hint mono">
+      Also see:
+      <a href="/mcp-inspect">MCP inspector (interactive)</a>
+    </div>
+  </section>
+
+  <section id="scan-status" class="decode-output"></section>
+  <section id="scan-report" class="decode-output"></section>
+
+  <script>
+    const urlEl = document.getElementById('mcp-url') as HTMLInputElement;
+    const tokenEl = document.getElementById('mcp-token') as HTMLInputElement;
+    const btn = document.getElementById('mcp-scan-btn') as HTMLButtonElement;
+    const statusEl = document.getElementById('scan-status') as HTMLElement;
+    const reportEl = document.getElementById('scan-report') as HTMLElement;
+
+    function h(tag: string, attrs: Record<string, string> = {}, ...kids: (Node | string | null)[]): HTMLElement {
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) { if (k === 'class') el.className = v; else el.setAttribute(k, v); }
+      for (const k of kids) { if (k != null) el.appendChild(typeof k === 'string' ? document.createTextNode(k) : k); }
+      return el;
+    }
+    function kv(rows: Array<[string, string]>) {
+      const tbl = h('table', { class: 'kv-table' });
+      for (const [k, v] of rows) tbl.appendChild(h('tr', {}, h('th', {}, k), h('td', { class: 'mono' }, v)));
+      return tbl;
+    }
+    function badge(sev: string) { return h('span', { class: `badge ${sev}` }, sev); }
+    function gradeBadge(grade: string) {
+      const cls = grade === 'A' ? 'low' : grade === 'B' ? 'low' : grade === 'C' ? 'medium' : 'high';
+      return h('span', { class: `badge ${cls}`, style: 'font-size:1.4em; padding:4px 12px' }, grade);
+    }
+
+    async function scan() {
+      const url = urlEl.value.trim();
+      if (!url) { statusEl.textContent = 'Enter a URL.'; return; }
+      statusEl.innerHTML = '';
+      reportEl.innerHTML = '';
+      statusEl.appendChild(h('div', { class: 'loading' }, 'Scanning... (up to ~15s)'));
+
+      const body: Record<string, string> = { url };
+      const token = tokenEl.value.trim();
+      if (token) body.token = token;
+
+      let report: any;
+      try {
+        const res = await fetch('/api/mcp-scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        report = await res.json();
+        if (!res.ok || report.error) throw new Error(report.error || `HTTP ${res.status}`);
+      } catch (err: any) {
+        statusEl.innerHTML = '';
+        statusEl.appendChild(h('div', { class: 'finding severity-high' }, h('strong', {}, 'Scan failed'), h('p', {}, err.message || String(err))));
+        return;
+      }
+      statusEl.innerHTML = '';
+      render(report);
+    }
+
+    function render(report: any) {
+      // Summary card
+      const s = report.summary;
+      const summary = h('div', { class: 'panel' },
+        h('h2', {}, s.title),
+        h('div', { style: 'display:flex; gap:24px; align-items:center; flex-wrap:wrap' },
+          gradeBadge(s.grade),
+          h('div', {},
+            h('div', {}, badge(s.riskLevel), ` risk · ${report.findings.length} findings · ${report.meta.durationMs}ms`),
+            h('div', { class: 'mono', style: 'opacity:.75; font-size:.9em; margin-top:4px' }, `Score ${s.score}/100`),
+          ),
+        ),
+        h('ul', { class: 'mono' }, ...s.highlights.map((x: string) => h('li', {}, x)))
+      );
+      reportEl.appendChild(summary);
+
+      // Tabs
+      const tabs = ['Findings', 'Details', 'Raw JSON'];
+      const tabBar = h('div', { class: 'tabs' });
+      const panels: Record<string, HTMLElement> = {};
+      tabs.forEach((t, i) => {
+        const tb = h('button', { class: i === 0 ? 'active' : '' }, t);
+        tb.addEventListener('click', () => {
+          tabBar.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+          tb.classList.add('active');
+          Object.values(panels).forEach((p) => p.classList.add('hidden'));
+          panels[t].classList.remove('hidden');
+        });
+        tabBar.appendChild(tb);
+      });
+      reportEl.appendChild(tabBar);
+
+      // Findings
+      const fp = h('div', { class: 'panel' });
+      if (!report.findings.length) fp.appendChild(h('div', { class: 'loading' }, 'Clean scan: no issues emitted.'));
+      for (const f of report.findings) {
+        fp.appendChild(h('div', { class: 'finding' },
+          h('div', { class: 'title' }, badge(f.severity), f.title),
+          h('div', { class: 'explanation' }, f.explanation),
+          f.evidence.length ? h('div', {}, h('strong', {}, 'Evidence'), h('ul', {}, ...f.evidence.map((x: string) => h('li', {}, h('code', {}, x))))) : null,
+          f.nextSteps.length ? h('div', {}, h('strong', {}, 'Next steps'), h('ul', {}, ...f.nextSteps.map((x: string) => h('li', {}, x)))) : null,
+          f.suggestedCommands.length ? h('div', {}, h('strong', {}, 'Commands'), ...f.suggestedCommands.map((c: string) => h('pre', { class: 'cmd' }, c))) : null,
+        ));
+      }
+      panels['Findings'] = fp;
+      reportEl.appendChild(fp);
+
+      // Details
+      const dp = h('div', { class: 'panel hidden' });
+      const init = report.raw?.initialize || {};
+      dp.appendChild(h('h3', {}, 'Server identity'));
+      dp.appendChild(kv([
+        ['Target', report.target],
+        ['Host', report.host],
+        ['serverInfo.name', init.serverInfo?.name ?? '-'],
+        ['serverInfo.version', init.serverInfo?.version ?? '-'],
+        ['Protocol', init.protocolVersion ?? '-'],
+        ['Capabilities', Object.keys(init.capabilities || {}).join(', ') || '-'],
+      ]));
+      if (report.raw?.toolsList?.tools) {
+        dp.appendChild(h('h3', {}, `Tools (${report.raw.toolsList.tools.length})`));
+        dp.appendChild(kv(report.raw.toolsList.tools.map((t: any) => [t.name, t.description?.slice(0, 120) || '-'])));
+      }
+      const ua = report.raw?.unauthenticated;
+      if (ua) {
+        dp.appendChild(h('h3', {}, 'Unauthenticated probe'));
+        dp.appendChild(kv([
+          ['Status', String(ua.status)],
+          ['tools/list listable?', ua.toolsListed ? `YES (${ua.toolCount})` : 'no'],
+        ]));
+      }
+      panels['Details'] = dp;
+      reportEl.appendChild(dp);
+
+      // Raw JSON
+      const rp = h('div', { class: 'panel hidden' });
+      rp.appendChild(h('pre', { class: 'cmd' }, JSON.stringify(report, null, 2)));
+      panels['Raw JSON'] = rp;
+      reportEl.appendChild(rp);
+    }
+
+    btn.addEventListener('click', scan);
+    urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') scan(); });
+
+    const q = new URL(window.location.href).searchParams.get('url');
+    if (q) { urlEl.value = q; scan(); }
+  </script>
+</Layout>

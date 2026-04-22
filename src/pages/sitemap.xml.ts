@@ -4,13 +4,18 @@ import { getCollection } from 'astro:content';
 const SITE = 'https://netrecon.pages.dev';
 
 const staticRoutes: Array<{ path: string; changefreq: string; priority: string }> = [
-  { path: '/',         changefreq: 'weekly',  priority: '1.0' },
-  { path: '/about/',   changefreq: 'monthly', priority: '0.7' },
-  { path: '/compare/', changefreq: 'monthly', priority: '0.8' },
-  { path: '/decode/',  changefreq: 'monthly', priority: '0.8' },
-  { path: '/subnet/',  changefreq: 'monthly', priority: '0.8' },
-  { path: '/mcp/',     changefreq: 'monthly', priority: '0.7' },
-  { path: '/blog/',    changefreq: 'weekly',  priority: '0.8' },
+  { path: '/',              changefreq: 'weekly',  priority: '1.0' },
+  { path: '/about/',        changefreq: 'monthly', priority: '0.7' },
+  { path: '/compare/',      changefreq: 'monthly', priority: '0.8' },
+  { path: '/tools/',        changefreq: 'monthly', priority: '0.8' },
+  { path: '/decode/',       changefreq: 'monthly', priority: '0.7' },
+  { path: '/subnet/',       changefreq: 'monthly', priority: '0.7' },
+  { path: '/mcp/',          changefreq: 'monthly', priority: '0.7' },
+  { path: '/mcp-inspect/',  changefreq: 'monthly', priority: '0.8' },
+  { path: '/mcp-scan/',     changefreq: 'monthly', priority: '0.8' },
+  { path: '/cert-inspect/', changefreq: 'monthly', priority: '0.7' },
+  { path: '/csp-analyze/',  changefreq: 'monthly', priority: '0.7' },
+  { path: '/blog/',         changefreq: 'weekly',  priority: '0.8' },
 ];
 
 function xmlEscape(s: string): string {
